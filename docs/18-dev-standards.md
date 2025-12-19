@@ -18,6 +18,7 @@ Define coding and documentation standards so implementations are consistent acro
 - All external inputs must be validated:
   - API request bodies
   - environment variables
+  - query parameters (including pagination)
   - database rows (when deserializing JSONB)
 - Validation errors must use the standard error response shape (see `15-api-contracts.md`).
 

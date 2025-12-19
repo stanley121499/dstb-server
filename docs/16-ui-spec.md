@@ -111,13 +111,20 @@ Must show:
 
 Inputs:
 
-- Select multiple backtest runs
+- Select multiple backtest runs from a server-provided list
 
 Outputs:
 
 - Metrics comparison table
 - Overlay equity curves
 - Table of “best run” by chosen metric
+
+Data source requirements:
+
+- The UI should populate the run picker using:
+  - `GET /v1/backtests` (paged)
+- The compare action should call:
+  - `POST /v1/backtests/compare`
 
 ## Phase 2: Live Bots (future screens)
 

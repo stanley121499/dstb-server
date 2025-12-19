@@ -162,6 +162,10 @@ Implement:
 - Request validation and standard error format.
 - CORS configuration for local dev + Vercel domain support.
 
+Must include (often missed):
+
+- `GET /v1/backtests` list endpoint (paged offset/limit), used by the Compare Runs UI.
+
 Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
