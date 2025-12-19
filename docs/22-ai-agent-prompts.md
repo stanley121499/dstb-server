@@ -8,6 +8,45 @@ You will use multiple AI agents to build the monorepo (server + frontend). This 
 - File ownership rules to avoid merge conflicts
 - What can be done in parallel vs what must be sequential
 
+## Quick navigation (Table of Contents)
+
+- [AI agent prompts + parallelization plan](#ai-agent-prompts--parallelization-plan)
+  - [Goal](#goal)
+  - [Quick navigation (Table of Contents)](#quick-navigation-table-of-contents)
+  - [Golden rules (must follow)](#golden-rules-must-follow)
+  - [Run order + parallelization](#run-order--parallelization)
+    - [Phase 1 (Backtesting)](#phase-1-backtesting)
+    - [Phase 2 (Live trading)](#phase-2-live-trading)
+  - [Agents (file ownership)](#agents-file-ownership)
+  - [What cannot run in parallel (or needs coordination)](#what-cannot-run-in-parallel-or-needs-coordination)
+  - [Phase 1 prompts](#phase-1-prompts)
+  - [Prompt: Agent 0 (Monorepo bootstrap + tooling)](#prompt-agent-0-monorepo-bootstrap--tooling)
+  - [Prompt: Agent A (Backend / API)](#prompt-agent-a-backend--api)
+  - [Prompt: Agent B (Frontend / React)](#prompt-agent-b-frontend--react)
+  - [Prompt: Agent C (Shared package: types/schemas)](#prompt-agent-c-shared-package-typesschemas)
+  - [Prompt: Agent D (Supabase migrations)](#prompt-agent-d-supabase-migrations)
+  - [Prompt: Agent H (Integration + smoke test)](#prompt-agent-h-integration--smoke-test)
+  - [Coordination checklist (before merging agent work)](#coordination-checklist-before-merging-agent-work)
+  - [Package manager note (authoritative for this repo)](#package-manager-note-authoritative-for-this-repo)
+  - [Phase 2 exchange decision (authoritative)](#phase-2-exchange-decision-authoritative)
+  - [Definition of Done (Phase 1) — acceptance checklist](#definition-of-done-phase-1--acceptance-checklist)
+    - [Prerequisites (local)](#prerequisites-local)
+    - [Required workspace scripts (must exist)](#required-workspace-scripts-must-exist)
+    - [1) Install dependencies](#1-install-dependencies)
+    - [2) Start API (backend)](#2-start-api-backend)
+    - [3) Start Web (frontend)](#3-start-web-frontend)
+    - [4) Auth works (Supabase email/password)](#4-auth-works-supabase-emailpassword)
+    - [5) Create + save a Parameter Set](#5-create--save-a-parameter-set)
+    - [6) Run a Backtest and view results](#6-run-a-backtest-and-view-results)
+    - [7) Compare runs (minimum)](#7-compare-runs-minimum)
+    - [8) Deployment readiness (smoke)](#8-deployment-readiness-smoke)
+  - [Phase 2 (Live trading)](#phase-2-live-trading-1)
+    - [Parallelization rules (Phase 2)](#parallelization-rules-phase-2)
+    - [What should be done sequentially (Phase 2)](#what-should-be-done-sequentially-phase-2)
+  - [Prompt: Agent E (Phase 2 - Exchange adapters: Paper + Luno)](#prompt-agent-e-phase-2---exchange-adapters-paper--luno)
+  - [Prompt: Agent F (Phase 2 - Bot lifecycle + API endpoints)](#prompt-agent-f-phase-2---bot-lifecycle--api-endpoints)
+  - [Prompt: Agent G (Phase 2 - Frontend Live Bots screens)](#prompt-agent-g-phase-2---frontend-live-bots-screens)
+
 ## Golden rules (must follow)
 
 - Each agent must follow all docs in `docs/` as the source of truth.
@@ -19,7 +58,23 @@ You will use multiple AI agents to build the monorepo (server + frontend). This 
 - Validate all external inputs (API, env vars, DB rows).
 - No agent should edit files “owned” by another agent without explicit coordination.
 
-## Recommended agent split (file ownership)
+## Run order + parallelization
+
+### Phase 1 (Backtesting)
+
+- Run **Agent 0 first** (workspace + repo scaffolding).
+- Then run **Agent A + Agent B + Agent C + Agent D** in parallel (safe if you enforce folder ownership).
+- Run **Agent H last** (integration + smoke test / acceptance).
+
+### Phase 2 (Live trading)
+
+- Only start Phase 2 after Phase 1 passes the [Definition of Done](#definition-of-done-phase-1--acceptance-checklist).
+- Phase 2 backend work must be split to avoid collisions in `apps/api/**`:
+  - Agent E = adapters/exchanges only
+  - Agent F = bots/routes only
+  - Agent G = frontend only
+
+## Agents (file ownership)
 
 - **Agent 0 (monorepo bootstrap)**: owns root workspace files (e.g., `package.json`, workspace config, root tooling configs)
 - **Agent A (backend scaffold + API)**: owns `apps/api/**`
@@ -29,22 +84,6 @@ You will use multiple AI agents to build the monorepo (server + frontend). This 
 - **Agent H (integration + smoke test)**: may edit across folders only for final wiring and runtime verification (last step)
 
 Agents may read each other’s folders but should not edit them.
-
-## What can run in parallel
-
-These tasks can be executed in parallel because they touch different folders:
-
-- Agent 0 bootstraps the monorepo structure and root tooling
-- Agent A scaffolds API app
-- Agent B scaffolds web app
-- Agent C creates shared types/schemas package
-- Agent D creates initial migrations
-
-Important sequencing:
-
-- Run **Agent 0 first** (it creates the workspace/tooling foundation).
-- Then Agent A/B/C/D can run in parallel.
-- Run **Agent H last** to wire everything together and ensure it actually runs.
 
 ## What cannot run in parallel (or needs coordination)
 
@@ -60,11 +99,15 @@ Also, these are sequencing-sensitive:
 - Migrations (DB) should land before API endpoints relying on those tables.
 - Shared types should stabilize before both UI and API import them heavily.
 
+---
+
+## Phase 1 prompts
+
 ## Prompt: Agent 0 (Monorepo bootstrap + tooling)
 
 Copy/paste:
 
-"""
+```text
 You are bootstrapping the monorepo. Read and follow these docs as source of truth:
 - docs/20-monorepo-and-local-dev.md
 - docs/18-dev-standards.md
@@ -92,13 +135,13 @@ Implement:
 Constraints:
 - Do not implement business logic in this step.
 - Keep it Windows-friendly.
-"""
+```
 
 ## Prompt: Agent A (Backend / API)
 
 Copy/paste:
 
-"""
+```text
 You are building the backend in a monorepo. Read and follow these docs as source of truth:
 - docs/10-requirements.md
 - docs/11-architecture.md
@@ -123,13 +166,13 @@ Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
 - Include JSDoc for exported functions and inline comments for complex logic.
-"""
+```
 
 ## Prompt: Agent B (Frontend / React)
 
 Copy/paste:
 
-"""
+```text
 You are building the frontend in a monorepo. Read and follow these docs as source of truth:
 - docs/12-strategy-orb-atr.md
 - docs/15-api-contracts.md
@@ -159,13 +202,13 @@ Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
 - Validate and guard against invalid user inputs.
-"""
+```
 
 ## Prompt: Agent C (Shared package: types/schemas)
 
 Copy/paste:
 
-"""
+```text
 You are building the shared package in a monorepo. Read and follow these docs as source of truth:
 - docs/12-strategy-orb-atr.md (parameter schema)
 - docs/15-api-contracts.md (API shapes)
@@ -186,13 +229,13 @@ Implement:
 Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
-"""
+```
 
 ## Prompt: Agent D (Supabase migrations)
 
 Copy/paste:
 
-"""
+```text
 You are responsible for Supabase migrations. Read and follow these docs as source of truth:
 - docs/17-supabase-schema-and-migrations.md
 - docs/10-requirements.md
@@ -211,13 +254,13 @@ Implement:
 
 Notes:
 - Follow the single-client rules in `docs/17-supabase-schema-and-migrations.md` (no `user_id`, no RLS in Phase 1).
-"""
+```
 
 ## Prompt: Agent H (Integration + smoke test)
 
 Copy/paste:
 
-"""
+```text
 You are the integration agent. Your job is to ensure the system is fully runnable end-to-end on local dev.
 
 Read and follow these docs as source of truth:
@@ -245,7 +288,7 @@ Deliverable:
 
 Constraints:
 - Do not redesign features; only wire and fix integration issues.
-"""
+```
 
 ## Coordination checklist (before merging agent work)
 
@@ -383,14 +426,16 @@ Expected:
 - `apps/api` uses `SUPABASE_SERVICE_ROLE_KEY` server-side only.
 - CORS is restricted to local dev + expected production domains (no `*`).
 
-## Phase 2 prompts (Live trading)
+---
+
+## Phase 2 (Live trading)
 
 These prompts are intended for after Phase 1 backtesting is working end-to-end.
 
-### What can run in parallel (Phase 2)
+### Parallelization rules (Phase 2)
 
 - UI “Live Bots” screens can be done in parallel with backend Phase 2 work if API contract is stable.
-- Backend Phase 2 work should be split by folder ownership to avoid conflicts (see prompts below).
+- Backend Phase 2 work should be split by folder ownership to avoid conflicts (see Agent E vs Agent F scopes).
 
 ### What should be done sequentially (Phase 2)
 
@@ -401,7 +446,7 @@ These prompts are intended for after Phase 1 backtesting is working end-to-end.
 
 Copy/paste:
 
-"""
+```text
 You are implementing Phase 2 exchange adapters in a monorepo. Read and follow these docs as source of truth:
 - docs/11-architecture.md
 - docs/12-strategy-orb-atr.md
@@ -428,13 +473,13 @@ Constraints:
 - Double quotes for strings; no '+' concatenation.
 - All secrets server-side only. Never expose API keys to frontend.
 - Include JSDoc and inline comments for tricky parts (idempotency, retries, rate limits).
-"""
+```
 
 ## Prompt: Agent F (Phase 2 - Bot lifecycle + API endpoints)
 
 Copy/paste:
 
-"""
+```text
 You are implementing Phase 2 bot lifecycle management in a monorepo. Read and follow these docs as source of truth:
 - docs/10-requirements.md
 - docs/11-architecture.md
@@ -469,13 +514,13 @@ Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
 - Implement robust error handling, retries, and safe stop/restart behavior.
-"""
+```
 
 ## Prompt: Agent G (Phase 2 - Frontend Live Bots screens)
 
 Copy/paste:
 
-"""
+```text
 You are implementing Phase 2 Live Bots UI. Read and follow these docs as source of truth:
 - docs/15-api-contracts.md (Phase 2 endpoints)
 - docs/16-ui-spec.md (Phase 2 Live Bots screens)
@@ -495,6 +540,6 @@ Implement:
 Constraints:
 - Strict TypeScript; no any; no non-null assertion; no unsafe casts.
 - Double quotes for strings; no '+' concatenation.
-"""
+```
 
 
