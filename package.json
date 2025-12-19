@@ -1,0 +1,25 @@
+{
+  "name": "dstb",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "npm@10.9.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "bootstrap": "npm install",
+    "dev:api": "npm run -w apps/api dev --if-present",
+    "dev:web": "npm run -w apps/web dev --if-present",
+    "build": "npm run -ws build --if-present",
+    "typecheck": "npm run -ws typecheck --if-present",
+    "lint": "npm run -ws lint --if-present",
+    "clean": "npm run -ws clean --if-present",
+    "preinstall": "npx --yes only-allow npm"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "only-allow": "^1.2.2",
+    "typescript": "^5.9.3"
+  }
+}
