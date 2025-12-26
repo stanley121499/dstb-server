@@ -17,6 +17,7 @@ export type BacktestRun = Readonly<{
   createdAt: string;
   status: BacktestRunStatus;
   parameterSetId: string | null;
+  paramsSnapshot: StrategyParams;
 
   symbol: string;
   interval: string;
@@ -47,6 +48,7 @@ export type BacktestRunSummary = Readonly<{
   maxDrawdownPct: number | null;
   winRatePct: number | null;
   profitFactor: number | null;
+  strategyParams?: StrategyParams;
 }>;
 
 export type TradeDirection = "long" | "short";
@@ -90,4 +92,8 @@ export type BacktestCompareResponse = Readonly<{
     }>;
   }>[];
 }>;
+
+
+
+
 

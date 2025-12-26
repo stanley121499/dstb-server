@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../lib/utils";
 
 export type RadioOption<T extends string> = Readonly<{
   value: T;
@@ -15,39 +16,43 @@ export type RadioGroupProps<T extends string> = Readonly<{
 
 /**
  * Single-select control for mutually exclusive choices.
+ * Redesigned with modern styling and better accessibility.
  */
 export function RadioGroup<T extends string>(props: RadioGroupProps<T>): React.ReactElement {
   return (
-    <div className="col" style={{ gap: 8 }}>
-      <span className="label">{props.label}</span>
-      <div className="row" style={{ gap: 8 }}>
+    <div className="space-y-3">
+      {props.label && <label className="text-small font-medium">{props.label}</label>}
+      <div className="flex flex-col sm:flex-row gap-3">
         {props.options.map((opt) => {
           const id = `${props.label}-${opt.value}`;
+          const isSelected = opt.value === props.value;
 
           return (
             <label
               key={opt.value}
               htmlFor={id}
-              className="card"
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                borderColor: opt.value === props.value ? "rgba(96, 165, 250, 0.55)" : undefined,
-                cursor: "pointer",
-                minWidth: 160
-              }}
+              className={cn(
+                "flex items-center gap-3 p-4 rounded-sm border-2 cursor-pointer transition-all duration-150",
+                "hover:bg-secondary/50",
+                isSelected
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background"
+              )}
             >
-              <div className="row" style={{ alignItems: "center", gap: 8 }}>
-                <input
-                  id={id}
-                  type="radio"
-                  checked={opt.value === props.value}
-                  onChange={() => props.onChange(opt.value)}
-                />
-                <div className="col" style={{ gap: 2 }}>
-                  <span style={{ fontWeight: 700 }}>{opt.label}</span>
-                  {opt.description ? <span className="muted" style={{ fontSize: 12 }}>{opt.description}</span> : null}
-                </div>
+              <input
+                id={id}
+                type="radio"
+                checked={isSelected}
+                onChange={() => props.onChange(opt.value)}
+                className="h-4 w-4 border-border text-primary focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              />
+              <div className="flex-1 space-y-1">
+                <span className="text-small font-medium block">{opt.label}</span>
+                {opt.description && (
+                  <span className="text-caption text-muted-foreground block">
+                    {opt.description}
+                  </span>
+                )}
               </div>
             </label>
           );
@@ -56,3 +61,6 @@ export function RadioGroup<T extends string>(props: RadioGroupProps<T>): React.R
     </div>
   );
 }
+
+
+

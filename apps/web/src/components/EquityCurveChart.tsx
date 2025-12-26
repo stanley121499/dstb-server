@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export type EquityPoint = Readonly<{
   timeUtc: string;
@@ -11,110 +12,151 @@ export type EquityCurveSeries = Readonly<{
   points: readonly EquityPoint[];
 }>;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
 /**
- * Simple SVG line chart for equity curves.
- *
- * We keep this lightweight to avoid adding a charting dependency.
+ * Custom tooltip for the equity curve chart.
+ * Shows timestamp and equity value in a styled container.
  */
-export function EquityCurveChart(props: Readonly<{ series: readonly EquityCurveSeries[] }>): React.ReactElement {
-  const width = 980;
-  const height = 280;
-  const pad = 26;
+function CustomTooltip(props: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) {
+  if (!props.active || !props.payload || props.payload.length === 0) {
+    return null;
+  }
 
-  const allPoints = useMemo(() => props.series.flatMap((s) => s.points), [props.series]);
-
-  const domain = useMemo(() => {
-    const equities = allPoints.map((p) => p.equity).filter((x) => Number.isFinite(x));
-
-    const min = equities.length > 0 ? Math.min(...equities) : 0;
-    const max = equities.length > 0 ? Math.max(...equities) : 1;
-
-    const safeMin = Number.isFinite(min) ? min : 0;
-    const safeMax = Number.isFinite(max) ? max : 1;
-
-    return {
-      min: safeMin,
-      max: safeMax
-    };
-  }, [allPoints]);
-
-  const yScale = useMemo(() => {
-    const span = domain.max - domain.min;
-    const safeSpan = span === 0 ? 1 : span;
-
-    return (equity: number): number => {
-      const t = (equity - domain.min) / safeSpan;
-      const y = pad + (1 - clamp(t, 0, 1)) * (height - pad * 2);
-      return y;
-    };
-  }, [domain.max, domain.min]);
-
-  const makePath = (pts: readonly EquityPoint[]): string => {
-    if (pts.length === 0) {
-      return "";
-    }
-
-    const innerWidth = width - pad * 2;
-
-    const toX = (idx: number): number => {
-      const denom = pts.length <= 1 ? 1 : pts.length - 1;
-      const t = idx / denom;
-      return pad + t * innerWidth;
-    };
-
-    const commands: string[] = [];
-
-    for (let i = 0; i < pts.length; i += 1) {
-      const x = toX(i);
-      const p = pts[i];
-      if (p === undefined) {
-        continue;
-      }
-      const y = yScale(p.equity);
-      commands.push(`${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`);
-    }
-
-    return commands.join(" ");
-  };
+  const entry = props.payload[0];
+  if (!entry) {
+    return null;
+  }
 
   return (
-    <div className="card" style={{ overflow: "hidden" }}>
-      <div className="cardHeader">
-        <p className="h2">Equity curve</p>
-        <p className="muted" style={{ margin: "6px 0 0" }}>
-          Min: {domain.min.toFixed(2)} | Max: {domain.max.toFixed(2)}
-        </p>
-      </div>
-      <div className="cardBody">
-        <svg width="100%" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Equity curve chart">
-          <rect x={0} y={0} width={width} height={height} fill="rgba(255, 255, 255, 0.02)" />
-          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(255, 255, 255, 0.15)" />
-          <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="rgba(255, 255, 255, 0.15)" />
-
-          {props.series.map((s) => {
-            const d = makePath(s.points);
-
-            return d.length > 0 ? (
-              <path key={s.label} d={d} fill="none" stroke={s.color} strokeWidth={2} opacity={0.95} />
-            ) : null;
-          })}
-        </svg>
-
-        {props.series.length > 1 ? (
-          <div className="row" style={{ gap: 10, marginTop: 10 }}>
-            {props.series.map((s) => (
-              <span key={s.label} className="badge">
-                <span style={{ width: 10, height: 10, borderRadius: 999, background: s.color, display: "inline-block", marginRight: 6 }} />
-                {s.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
+    <div className="customTooltip">
+      <div className="label">{props.label}</div>
+      <div className="value" style={{ color: entry.color }}>
+        ${entry.value.toFixed(2)}
       </div>
     </div>
   );
 }
+
+/**
+ * Equity curve chart using Recharts library.
+ *
+ * Features:
+ * - Time-based X-axis with formatted dates
+ * - Interactive tooltips showing equity value
+ * - Grid lines for easier reading
+ * - Support for multiple series (for comparison)
+ * - Responsive sizing
+ *
+ * @param props - Chart series data
+ */
+export function EquityCurveChart(props: Readonly<{ series: readonly EquityCurveSeries[] }>): React.ReactElement {
+  const chartData = useMemo(() => {
+    // Merge all series into a single time-indexed dataset.
+    const timeMap = new Map<string, Record<string, number | string>>();
+
+    for (const s of props.series) {
+      for (const point of s.points) {
+        let entry = timeMap.get(point.timeUtc);
+        if (!entry) {
+          entry = { time: point.timeUtc };
+          timeMap.set(point.timeUtc, entry);
+        }
+        entry[s.label] = point.equity;
+      }
+    }
+
+    // Convert to array and sort by time.
+    const data = Array.from(timeMap.values()).sort((a, b) => {
+      const timeA = typeof a.time === "string" ? new Date(a.time).getTime() : 0;
+      const timeB = typeof b.time === "string" ? new Date(b.time).getTime() : 0;
+      return timeA - timeB;
+    });
+
+    // Format time labels to be more readable.
+    return data.map((d) => ({
+      ...d,
+      time: typeof d.time === "string" ? new Date(d.time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : d.time
+    }));
+  }, [props.series]);
+
+  const domain = useMemo(() => {
+    const allEquities: number[] = [];
+    for (const s of props.series) {
+      for (const p of s.points) {
+        if (Number.isFinite(p.equity)) {
+          allEquities.push(p.equity);
+        }
+      }
+    }
+
+    if (allEquities.length === 0) {
+      return { min: 0, max: 1 };
+    }
+
+    const min = Math.min(...allEquities);
+    const max = Math.max(...allEquities);
+
+    return { min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 1 };
+  }, [props.series]);
+
+  if (props.series.length === 0 || props.series.every((s) => s.points.length === 0)) {
+    return (
+      <div className="card">
+        <div className="cardHeader">
+          <p className="h2">Equity curve</p>
+        </div>
+        <div className="cardBody">
+          <p className="muted">No equity data available yet.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="cardHeader">
+        <p className="h2">Equity curve</p>
+        <p className="muted" style={{ margin: "6px 0 0" }}>
+          Min: ${domain.min.toFixed(2)} | Max: ${domain.max.toFixed(2)}
+        </p>
+      </div>
+      <div className="cardBody">
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
+            <XAxis 
+              dataKey="time" 
+              stroke="var(--muted)"
+              tick={{ fill: "var(--muted)", fontSize: 11 }}
+              angle={-15}
+              textAnchor="end"
+              height={60}
+            />
+            <YAxis 
+              stroke="var(--muted)"
+              tick={{ fill: "var(--muted)", fontSize: 11 }}
+              domain={[domain.min * 0.98, domain.max * 1.02]}
+              tickFormatter={(value: number) => `$${value.toFixed(0)}`}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            {props.series.length > 1 ? <Legend wrapperStyle={{ paddingTop: 20 }} /> : null}
+            {props.series.map((s) => (
+              <Line
+                key={s.label}
+                type="monotone"
+                dataKey={s.label}
+                stroke={s.color}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+                animationDuration={300}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+
+

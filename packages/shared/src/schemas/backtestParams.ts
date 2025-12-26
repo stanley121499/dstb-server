@@ -192,3 +192,7 @@ export type StopMode = z.infer<typeof StopModeSchema>;
 export type TakeProfitMode = z.infer<typeof TakeProfitModeSchema>;
 export type TrailingStopMode = z.infer<typeof TrailingStopModeSchema>;
 export type TimeExitMode = z.infer<typeof TimeExitModeSchema>;
+
+
+
+

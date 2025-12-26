@@ -47,6 +47,7 @@ function mapRowToDto(row: BacktestRunRow): BacktestRun {
     createdAt: toIsoUtc(row.created_at),
     status: row.status,
     parameterSetId: row.parameter_set_id,
+    paramsSnapshot: row.params_snapshot as StrategyParams,
     symbol: row.symbol,
     interval: row.interval,
     startTimeUtc: toIsoUtc(row.start_time_utc),
@@ -76,7 +77,8 @@ function mapRowToSummary(row: BacktestRunRow): BacktestRunSummary {
     totalReturnPct: row.total_return_pct === null ? null : Number(row.total_return_pct),
     maxDrawdownPct: row.max_drawdown_pct === null ? null : Number(row.max_drawdown_pct),
     winRatePct: row.win_rate_pct === null ? null : Number(row.win_rate_pct),
-    profitFactor: row.profit_factor === null ? null : Number(row.profit_factor)
+    profitFactor: row.profit_factor === null ? null : Number(row.profit_factor),
+    strategyParams: row.params_snapshot as StrategyParams
   };
 }
 
@@ -123,6 +125,55 @@ export async function createBacktestRun(args: Readonly<{
 
   const row = backtestRunRowSchema.parse(result.data);
   return mapRowToDto(row);
+}
+
+/**
+ * Bulk creates multiple backtest runs in a single database operation.
+ * Much faster than calling createBacktestRun in a loop for grid search.
+ * 
+ * Optimization mode is enabled for bulk operations to skip expensive logging.
+ */
+export async function createBacktestRunsBulk(args: Readonly<{
+  supabase: SupabaseClient;
+  runs: readonly Readonly<{
+    id: string;
+    parameterSetId: string | null;
+    paramsSnapshot: StrategyParams;
+    engineVersion: string;
+    symbol: string;
+    interval: string;
+    startTimeUtc: string;
+    endTimeUtc: string;
+    initialEquity: number;
+  }>[];
+}>): Promise<void> {
+  if (args.runs.length === 0) {
+    return;
+  }
+
+  const insertPayloads = args.runs.map((run) => ({
+    id: run.id,
+    status: "queued" satisfies BacktestRunStatus,
+    parameter_set_id: run.parameterSetId,
+    params_snapshot: run.paramsSnapshot,
+    engine_version: run.engineVersion,
+    symbol: run.symbol,
+    interval: run.interval,
+    start_time_utc: run.startTimeUtc,
+    end_time_utc: run.endTimeUtc,
+    initial_equity: run.initialEquity,
+    data_source: "yfinance",
+    data_fingerprint: {
+      status: "pending",
+      optimization_mode: true  // Enable fast mode for bulk operations
+    },
+    error_message: null
+  }));
+
+  const result = await args.supabase.from("backtest_runs").insert(insertPayloads);
+  if (result.error !== null) {
+    throw result.error;
+  }
 }
 
 /**
@@ -272,4 +323,8 @@ export async function compareBacktestRuns(args: Readonly<{
     }))
   };
 }
+
+
+
+
 

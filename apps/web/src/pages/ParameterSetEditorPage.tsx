@@ -1,11 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Save, Copy, RefreshCw } from "lucide-react";
 
 import { NumberField } from "../components/NumberField";
 import { RadioGroup } from "../components/RadioGroup";
 import { SelectField } from "../components/SelectField";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { JsonViewer } from "../components/JsonViewer";
+import { Tooltip } from "../components/Tooltip";
+import { PageHeader } from "../components/layout/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Separator } from "../components/ui/separator";
 
 import {
   createDefaultStrategyParams,
@@ -27,6 +35,7 @@ import {
 } from "../domain/strategyParams";
 import { apiCreateParameterSet, apiGetParameterSet, type ParameterSet } from "../lib/dstbApi";
 import { parseNumber } from "../lib/numberParsing";
+import { helpText } from "../lib/helpText";
 
 type ParamNumberFieldId =
   | "entry.breakoutBufferBps"
@@ -368,107 +377,122 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
   );
 
   return (
-    <div className="container">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <div className="col">
-          <p className="h1" style={{ marginBottom: 2 }}>
-            {props.mode === "create" ? "Create Parameter Set" : "Parameter Set"}
-          </p>
-          <span className="muted">Maps 1:1 to the strategy schema in docs.</span>
+    <div className="page-container max-w-5xl">
+      <div className="flex justify-between items-start mb-8">
+        <div className="space-y-2">
+          <h1 className="text-display font-bold">
+            {props.mode === "create" ? "Create Strategy" : "Edit Strategy"}
+          </h1>
+          <p className="text-body text-muted-foreground">Configure your opening range breakout strategy parameters</p>
         </div>
 
-        <div className="row" style={{ alignItems: "center" }}>
-          <Link className="btn" to="/parameter-sets">
-            Back
-          </Link>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" asChild>
+            <Link to="/strategies">Cancel</Link>
+          </Button>
           {props.mode === "create" ? (
-            <button className="btn btnPrimary" type="button" onClick={() => void onSave("create")} disabled={isLoading}>
+            <Button onClick={() => void onSave("create")} disabled={isLoading}>
+              <Save className="h-4 w-4 mr-2" />
               Save
-            </button>
+            </Button>
           ) : (
-            <button className="btn btnPrimary" type="button" onClick={() => void onSave("save_as_new")} disabled={isLoading}>
-              Save as new
-            </button>
+            <Button onClick={() => void onSave("save_as_new")} disabled={isLoading}>
+              <Copy className="h-4 w-4 mr-2" />
+              Save as New
+            </Button>
           )}
         </div>
       </div>
 
-      <div className="hr" />
-
-      {error ? <div className="errorBox" style={{ marginBottom: 12 }}>{error}</div> : null}
-      {props.mode === "edit" ? (
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div className="cardBody">
-            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {id ? `Loaded ID: ${id}` : "Missing ID"}
-              </span>
-              <button className="btn" type="button" onClick={() => void loadIfNeeded()} disabled={isLoading}>
+      {error && (
+        <Card className="mb-6 border-destructive/50 bg-destructive/5">
+          <CardContent className="pt-6">
+            <p className="text-small text-destructive font-medium">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+      {props.mode === "edit" && (
+        <Card className="mb-6 border-primary/20 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center">
+              <div className="space-y-1">
+                <p className="text-caption text-muted-foreground">
+                  {id ? `Loaded ID: ${id}` : "Missing ID"}
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  Update endpoint is not defined in v1 API contracts; use "Save as new".
+                </p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void loadIfNeeded()} disabled={isLoading}>
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Reload
-              </button>
+              </Button>
             </div>
-            <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-              Update endpoint is not defined in v1 API contracts; use “Save as new”.
+          </CardContent>
+        </Card>
+      )}
+
+      {openingRangeWarning && (
+        <Card className="mb-6 border-warning/50 bg-warning/5">
+          <CardContent className="pt-6">
+            <p className="text-small text-warning-foreground font-medium">{openingRangeWarning}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {issues.length > 0 && (
+        <Card className="mb-6 border-destructive/50 bg-destructive/5">
+          <CardContent className="pt-6">
+            <p className="text-small font-semibold text-destructive mb-3">Validation Issues</p>
+            <ul className="list-disc list-inside space-y-1">
+              {issues.map((i) => (
+                <li key={`${i.path}:${i.message}`} className="text-small text-destructive">
+                  <span className="font-medium">{i.path}:</span> {i.message}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Metadata</CardTitle>
+          <CardDescription>Basic information about this strategy configuration</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={name} onChange={(ev) => setName(ev.target.value)} placeholder="My ORB config" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description (optional)</Label>
+              <Input value={description} onChange={(ev) => setDescription(ev.target.value)} placeholder="Notes" />
             </div>
           </div>
-        </div>
-      ) : null}
+        </CardContent>
+      </Card>
 
-      {openingRangeWarning ? <div className="errorBox" style={{ marginBottom: 12 }}>{openingRangeWarning}</div> : null}
-
-      {issues.length > 0 ? (
-        <div className="errorBox" style={{ marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Validation issues</div>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {issues.map((i) => (
-              <li key={`${i.path}:${i.message}`}>{`${i.path}: ${i.message}`}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="card">
-        <div className="cardHeader">
-          <p className="h2">Metadata</p>
-        </div>
-        <div className="cardBody">
-          <div className="row">
-            <label className="col" style={{ flex: 1, minWidth: 260 }}>
-              <span className="label">Name</span>
-              <input className="input" value={name} onChange={(ev) => setName(ev.target.value)} placeholder="My ORB config" />
-            </label>
-            <label className="col" style={{ flex: 1, minWidth: 260 }}>
-              <span className="label">Description (optional)</span>
-              <input className="input" value={description} onChange={(ev) => setDescription(ev.target.value)} placeholder="Notes" />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ height: 12 }} />
-
-      <div className="card">
-        <div className="cardHeader">
-          <p className="h2">Instrument</p>
-        </div>
-        <div className="cardBody">
-          <div className="row">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Instrument</CardTitle>
+          <CardDescription>Select the symbol and timeframe for this strategy</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SelectField<SymbolId> label="Symbol" value={draft.symbol} options={symbolOptions} onChange={setSymbol} />
             <SelectField<IntervalId> label="Effective interval" value={draft.interval} options={intervalOptions} onChange={setInterval} />
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ height: 12 }} />
-
-      <div className="card">
-        <div className="cardHeader">
-          <p className="h2">Session</p>
-          <p className="muted" style={{ margin: "6px 0 0" }}>
-            Timezone fixed to America/New_York. Session start fixed to 09:30.
-          </p>
-        </div>
-        <div className="cardBody">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Session</CardTitle>
+          <CardDescription>Timezone fixed to America/New_York. Session start fixed to 09:30.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <SelectField<"5" | "15" | "30" | "60">
             label="Opening range minutes"
             value={openingRangeValue}
@@ -491,16 +515,15 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
               }
             }}
           />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ height: 12 }} />
-
-      <div className="card">
-        <div className="cardHeader">
-          <p className="h2">Entry</p>
-        </div>
-        <div className="cardBody">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Entry</CardTitle>
+          <CardDescription>Configure how trades are entered</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
           <RadioGroup<DirectionMode>
             label="Direction mode"
             value={draft.entry.directionMode}
@@ -508,7 +531,7 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
             onChange={(directionMode) => setDraft((prev) => ({ ...prev, entry: { ...prev.entry, directionMode } }))}
           />
 
-          <div style={{ height: 10 }} />
+          <Separator />
 
           <RadioGroup<EntryMode>
             label="Entry mode"
@@ -517,9 +540,9 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
             onChange={(entryMode) => setDraft((prev) => ({ ...prev, entry: { ...prev.entry, entryMode } }))}
           />
 
-          <div style={{ height: 10 }} />
+          <Separator />
 
-          <div className="row">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <NumberField
               label="Breakout buffer (bps)"
               value={numbers["entry.breakoutBufferBps"]}
@@ -544,17 +567,16 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
               }}
             />
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ height: 12 }} />
-
-      <div className="card">
-        <div className="cardHeader">
-          <p className="h2">ATR</p>
-        </div>
-        <div className="cardBody">
-          <div className="row">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>ATR (Average True Range)</CardTitle>
+          <CardDescription>Configure volatility measurement for position sizing and stops</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Tooltip content={helpText.strategy.atrLength}>
             <NumberField
               label="ATR length"
               value={numbers["atr.atrLength"]}
@@ -563,7 +585,7 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
               step={1}
               error={fieldErrors["atr.atrLength"] ?? validationMap["atr.atrLength"] ?? null}
             />
-          </div>
+          </Tooltip>
 
           <div style={{ height: 10 }} />
 
@@ -576,26 +598,30 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
 
           {draft.atr.atrFilter.enabled ? (
             <div style={{ marginTop: 10 }} className="row">
-              <NumberField
-                label="Min ATR (bps)"
-                value={numbers["atr.atrFilter.minAtrBps"]}
-                onChange={(v) => setNumbers((prev) => ({ ...prev, "atr.atrFilter.minAtrBps": v }))}
-                min={0}
-                step={1}
-                error={fieldErrors["atr.atrFilter.minAtrBps"] ?? validationMap["atr.atrFilter.minAtrBps"] ?? null}
-              />
-              <NumberField
-                label="Max ATR (bps)"
-                value={numbers["atr.atrFilter.maxAtrBps"]}
-                onChange={(v) => setNumbers((prev) => ({ ...prev, "atr.atrFilter.maxAtrBps": v }))}
-                min={0}
-                step={1}
-                error={fieldErrors["atr.atrFilter.maxAtrBps"] ?? validationMap["atr.atrFilter.maxAtrBps"] ?? null}
-              />
+              <Tooltip content={helpText.strategy.atrFilterMin}>
+                <NumberField
+                  label="Min ATR (bps)"
+                  value={numbers["atr.atrFilter.minAtrBps"]}
+                  onChange={(v) => setNumbers((prev) => ({ ...prev, "atr.atrFilter.minAtrBps": v }))}
+                  min={0}
+                  step={1}
+                  error={fieldErrors["atr.atrFilter.minAtrBps"] ?? validationMap["atr.atrFilter.minAtrBps"] ?? null}
+                />
+              </Tooltip>
+              <Tooltip content={helpText.strategy.atrFilterMax}>
+                <NumberField
+                  label="Max ATR (bps)"
+                  value={numbers["atr.atrFilter.maxAtrBps"]}
+                  onChange={(v) => setNumbers((prev) => ({ ...prev, "atr.atrFilter.maxAtrBps": v }))}
+                  min={0}
+                  step={1}
+                  error={fieldErrors["atr.atrFilter.maxAtrBps"] ?? validationMap["atr.atrFilter.maxAtrBps"] ?? null}
+                />
+              </Tooltip>
             </div>
           ) : null}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div style={{ height: 12 }} />
 
@@ -614,25 +640,29 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
           <div style={{ height: 10 }} />
 
           {draft.risk.sizingMode === "fixed_risk_pct" ? (
-            <NumberField
-              label="Risk % per trade"
-              value={numbers["risk.riskPctPerTrade"]}
-              onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.riskPctPerTrade": v }))}
-              min={0}
-              step={0.01}
-              help="Example: 0.5 means 0.5% of equity risked per trade."
-              error={fieldErrors["risk.riskPctPerTrade"] ?? validationMap["risk.riskPctPerTrade"] ?? null}
-            />
+            <Tooltip content={helpText.strategy.riskPctPerTrade}>
+              <NumberField
+                label="Risk % per trade"
+                value={numbers["risk.riskPctPerTrade"]}
+                onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.riskPctPerTrade": v }))}
+                min={0}
+                step={0.01}
+                help="Example: 0.5 means 0.5% of equity risked per trade."
+                error={fieldErrors["risk.riskPctPerTrade"] ?? validationMap["risk.riskPctPerTrade"] ?? null}
+              />
+            </Tooltip>
           ) : (
-            <NumberField
-              label="Fixed notional"
-              value={numbers["risk.fixedNotional"]}
-              onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.fixedNotional": v }))}
-              min={0}
-              step={1}
-              help="Example: 1000 means $1000 per trade."
-              error={fieldErrors["risk.fixedNotional"] ?? validationMap["risk.fixedNotional"] ?? null}
-            />
+            <Tooltip content={helpText.strategy.fixedNotional}>
+              <NumberField
+                label="Fixed notional"
+                value={numbers["risk.fixedNotional"]}
+                onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.fixedNotional": v }))}
+                min={0}
+                step={1}
+                help="Example: 1000 means $1000 per trade."
+                error={fieldErrors["risk.fixedNotional"] ?? validationMap["risk.fixedNotional"] ?? null}
+              />
+            </Tooltip>
           )}
 
           <div style={{ height: 10 }} />
@@ -646,14 +676,16 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
 
           {draft.risk.stopMode === "atr_multiple" ? (
             <div style={{ marginTop: 10 }}>
-              <NumberField
-                label="ATR stop multiple"
-                value={numbers["risk.atrStopMultiple"]}
-                onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.atrStopMultiple": v }))}
-                min={0}
-                step={0.1}
-                error={fieldErrors["risk.atrStopMultiple"] ?? validationMap["risk.atrStopMultiple"] ?? null}
-              />
+              <Tooltip content={helpText.strategy.atrStopMultiple}>
+                <NumberField
+                  label="ATR stop multiple"
+                  value={numbers["risk.atrStopMultiple"]}
+                  onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.atrStopMultiple": v }))}
+                  min={0}
+                  step={0.1}
+                  error={fieldErrors["risk.atrStopMultiple"] ?? validationMap["risk.atrStopMultiple"] ?? null}
+                />
+              </Tooltip>
             </div>
           ) : null}
 
@@ -676,14 +708,16 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
 
           {tpEnabled ? (
             <div style={{ marginTop: 10 }}>
-              <NumberField
-                label="TP R multiple"
-                value={numbers["risk.tpRMultiple"]}
-                onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.tpRMultiple": v }))}
-                min={0}
-                step={0.1}
-                error={fieldErrors["risk.tpRMultiple"] ?? validationMap["risk.tpRMultiple"] ?? null}
-              />
+              <Tooltip content={helpText.strategy.tpRMultiple}>
+                <NumberField
+                  label="TP R multiple"
+                  value={numbers["risk.tpRMultiple"]}
+                  onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.tpRMultiple": v }))}
+                  min={0}
+                  step={0.1}
+                  error={fieldErrors["risk.tpRMultiple"] ?? validationMap["risk.tpRMultiple"] ?? null}
+                />
+              </Tooltip>
             </div>
           ) : null}
 
@@ -706,14 +740,16 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
 
           {trailingEnabled ? (
             <div style={{ marginTop: 10 }}>
-              <NumberField
-                label="ATR trail multiple"
-                value={numbers["risk.atrTrailMultiple"]}
-                onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.atrTrailMultiple": v }))}
-                min={0}
-                step={0.1}
-                error={fieldErrors["risk.atrTrailMultiple"] ?? validationMap["risk.atrTrailMultiple"] ?? null}
-              />
+              <Tooltip content={helpText.strategy.atrTrailMultiple}>
+                <NumberField
+                  label="ATR trail multiple"
+                  value={numbers["risk.atrTrailMultiple"]}
+                  onChange={(v) => setNumbers((prev) => ({ ...prev, "risk.atrTrailMultiple": v }))}
+                  min={0}
+                  step={0.1}
+                  error={fieldErrors["risk.atrTrailMultiple"] ?? validationMap["risk.atrTrailMultiple"] ?? null}
+                />
+              </Tooltip>
             </div>
           ) : null}
 
@@ -782,22 +818,26 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
         </div>
         <div className="cardBody">
           <div className="row">
-            <NumberField
-              label="Fee (bps)"
-              value={numbers["execution.feeBps"]}
-              onChange={(v) => setNumbers((prev) => ({ ...prev, "execution.feeBps": v }))}
-              min={0}
-              step={1}
-              error={fieldErrors["execution.feeBps"] ?? validationMap["execution.feeBps"] ?? null}
-            />
-            <NumberField
-              label="Slippage (bps)"
-              value={numbers["execution.slippageBps"]}
-              onChange={(v) => setNumbers((prev) => ({ ...prev, "execution.slippageBps": v }))}
-              min={0}
-              step={1}
-              error={fieldErrors["execution.slippageBps"] ?? validationMap["execution.slippageBps"] ?? null}
-            />
+            <Tooltip content={helpText.strategy.feeBps}>
+              <NumberField
+                label="Fee (bps)"
+                value={numbers["execution.feeBps"]}
+                onChange={(v) => setNumbers((prev) => ({ ...prev, "execution.feeBps": v }))}
+                min={0}
+                step={1}
+                error={fieldErrors["execution.feeBps"] ?? validationMap["execution.feeBps"] ?? null}
+              />
+            </Tooltip>
+            <Tooltip content={helpText.strategy.slippageBps}>
+              <NumberField
+                label="Slippage (bps)"
+                value={numbers["execution.slippageBps"]}
+                onChange={(v) => setNumbers((prev) => ({ ...prev, "execution.slippageBps": v }))}
+                min={0}
+                step={1}
+                error={fieldErrors["execution.slippageBps"] ?? validationMap["execution.slippageBps"] ?? null}
+              />
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -817,3 +857,7 @@ export function ParameterSetEditorPage(props: Readonly<{ mode: "create" | "edit"
     </div>
   );
 }
+
+ 
+
+

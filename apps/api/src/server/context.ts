@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { Env } from "./env.js";
 import type { SupabaseClient } from "../supabase/client.js";
 import type { BacktestQueue } from "../jobs/backtestQueue.js";
+import type { WebSocketConnectionManager } from "../websocket/connectionManager.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -12,6 +13,8 @@ declare module "fastify" {
     supabase: SupabaseClient;
     /** In-process backtest queue (Phase 1). */
     backtestQueue: BacktestQueue;
+    /** WebSocket connection manager for real-time backtest updates. */
+    wsManager: WebSocketConnectionManager;
   }
 }
 
@@ -23,10 +26,15 @@ declare module "fastify" {
  */
 export function decorateServerContext(
   server: FastifyInstance,
-  args: Readonly<{ env: Env; supabase: SupabaseClient; backtestQueue: BacktestQueue }>
+  args: Readonly<{ env: Env; supabase: SupabaseClient; backtestQueue: BacktestQueue; wsManager: WebSocketConnectionManager }>
 ): void {
   server.decorate("env", args.env);
   server.decorate("supabase", args.supabase);
   server.decorate("backtestQueue", args.backtestQueue);
+  server.decorate("wsManager", args.wsManager);
 }
+
+
+
+
 

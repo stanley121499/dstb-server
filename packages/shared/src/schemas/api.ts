@@ -337,3 +337,7 @@ export type BacktestCompareResponse = z.infer<typeof BacktestCompareResponseSche
 export type BacktestGridOverride = z.infer<typeof BacktestGridOverrideSchema>;
 export type BacktestGridRequest = z.infer<typeof BacktestGridRequestSchema>;
 export type BacktestGridResponse = z.infer<typeof BacktestGridResponseSchema>;
+
+
+
+

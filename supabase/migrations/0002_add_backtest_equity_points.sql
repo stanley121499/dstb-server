@@ -24,3 +24,7 @@ create table if not exists public.backtest_equity_points (
 create index if not exists idx_backtest_equity_points_run_id_time_utc
   on public.backtest_equity_points (run_id, time_utc);
 
+
+
+
+

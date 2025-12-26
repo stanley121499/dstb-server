@@ -117,3 +117,7 @@ describe("fetchYahooCandles()", () => {
     ).rejects.toThrow(/0 valid candles/i);
   });
 });
+
+
+
+

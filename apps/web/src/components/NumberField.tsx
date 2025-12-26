@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo } from "react";
+import { Label } from "./ui/label";
+import { Input } from "./ui/input";
 
 export type NumberFieldProps = Readonly<{
   label: string;
@@ -34,10 +36,9 @@ export function NumberField(props: NumberFieldProps): React.ReactElement {
   );
 
   return (
-    <label className="col" style={{ gap: 6 }}>
-      <span className="label">{props.label}</span>
-      <input
-        className="input"
+    <div className="space-y-2">
+      <Label>{props.label}</Label>
+      <Input
         value={props.value}
         onChange={onChange}
         type="number"
@@ -46,8 +47,11 @@ export function NumberField(props: NumberFieldProps): React.ReactElement {
         max={inputProps.max}
         step={inputProps.step}
       />
-      {props.help ? <span className="muted" style={{ fontSize: 12 }}>{props.help}</span> : null}
-      {props.error ? <span style={{ color: "var(--danger)", fontSize: 12 }}>{props.error}</span> : null}
-    </label>
+      {props.help && <p className="text-caption text-muted-foreground">{props.help}</p>}
+      {props.error && <p className="text-caption text-destructive">{props.error}</p>}
+    </div>
   );
 }
+
+
+

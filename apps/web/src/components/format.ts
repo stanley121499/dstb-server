@@ -31,3 +31,7 @@ export function formatNumber(value: number | null): string {
 
   return value.toFixed(2);
 }
+
+
+
+

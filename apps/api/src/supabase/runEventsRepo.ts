@@ -28,3 +28,23 @@ export async function insertRunEvent(args: Readonly<{ supabase: SupabaseClient; 
   }
 }
 
+/**
+ * Batch insert multiple run events (much faster than inserting one at a time).
+ * Use this for bulk warnings to avoid performance issues.
+ */
+export async function insertRunEvents(args: Readonly<{ supabase: SupabaseClient; events: readonly RunEventInsert[] }>): Promise<void> {
+  if (args.events.length === 0) {
+    return;
+  }
+
+  const payloads = args.events.map((event) => runEventInsertSchema.parse(event));
+  const result = await args.supabase.from("run_events").insert(payloads);
+  if (result.error !== null) {
+    throw result.error;
+  }
+}
+
+
+
+
+

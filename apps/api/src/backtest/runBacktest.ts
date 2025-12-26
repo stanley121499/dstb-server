@@ -15,9 +15,15 @@ export type BacktestMetrics = Readonly<{
   tradeCount: number;
 }>;
 
+export type EquityPoint = Readonly<{
+  timeUtc: string;
+  equity: number;
+}>;
+
 export type BacktestResult = Readonly<{
   trades: readonly TradeInsert[];
   metrics: BacktestMetrics;
+  equityPoints: readonly EquityPoint[];
   warnings: readonly Readonly<{ code: string; message: string; context: Record<string, unknown> }>[];
 }>;
 
@@ -177,10 +183,13 @@ export function runBacktest(args: Readonly<{
   startTimeUtc: string;
   endTimeUtc: string;
   initialEquity: number;
+  optimizationMode?: boolean;
 }>): BacktestResult {
   const intervalMinutes = intervalToMinutes(args.params.interval);
+  const isOptimization = args.optimizationMode ?? false;
 
   const warnings: Array<Readonly<{ code: string; message: string; context: Record<string, unknown> }>> = [];
+  const equityPoints: EquityPoint[] = [];
 
   let equity = args.initialEquity;
   let peakEquity = args.initialEquity;
@@ -198,6 +207,11 @@ export function runBacktest(args: Readonly<{
   let openingCandles: Candle[] = [];
   let orLevels: Readonly<{ orHigh: number; orLow: number; orMid: number }> | null = null;
   let sessionEntryAllowed = true;
+  
+  // OPTIMIZATION #1 & #2: Cache session boundaries (calculated once per session)
+  let sessionStartMs = 0;
+  let openingWindowEndMs = 0;
+  let sessionEndMs = 0;
 
   // ATR state:
   let atrState: AtrState = {
@@ -212,6 +226,14 @@ export function runBacktest(args: Readonly<{
 
   // Precondition: candles should be sorted; we still enforce a stable order.
   const candlesSorted = [...args.candles].sort((a, b) => a.timeUtcMs - b.timeUtcMs);
+
+  // OPTIMIZATION #5: Record initial equity point only if not optimizing
+  if (!isOptimization && candlesSorted.length > 0 && candlesSorted[0] !== undefined) {
+    equityPoints.push({
+      timeUtc: new Date(candlesSorted[0].timeUtcMs).toISOString(),
+      equity: roundTo(equity, 10)
+    });
+  }
 
   for (let i = 0; i < candlesSorted.length; i += 1) {
     const candle = candlesSorted[i];
@@ -228,49 +250,74 @@ export function runBacktest(args: Readonly<{
       openingCandles = [];
       orLevels = null;
       sessionEntryAllowed = true;
+      
+      // OPTIMIZATION #1 & #2: Pre-calculate session boundaries once per session
+      const sessionLocal = DateTime.fromISO(`${sessionDateNy}T09:30:00`, { zone: "America/New_York" });
+      sessionStartMs = sessionLocal.toMillis();
+      openingWindowEndMs = sessionStartMs + (args.params.session.openingRangeMinutes * 60 * 1000);
+      
+      const sessionEndLocal = DateTime.fromISO(`${sessionDateNy}T${args.params.risk.sessionEndTime}:00`, { zone: "America/New_York" });
+      sessionEndMs = sessionEndLocal.toMillis();
     }
 
-    // ATR update must be done sequentially (no lookahead).
-    atrState = updateAtr(atrState, candle.close, candle.high, candle.low, args.params.atr.atrLength);
+    // OPTIMIZATION #3: Conditional ATR update (every 5 candles in optimization mode after warmup)
+    const shouldUpdateAtr = !isOptimization || atrState.atr === null || i % 5 === 0;
+    if (shouldUpdateAtr) {
+      atrState = updateAtr(atrState, candle.close, candle.high, candle.low, args.params.atr.atrLength);
+    }
 
-    // Opening range capture.
-    if (isInOpeningWindow({
-      timeUtcMs: candle.timeUtcMs,
-      sessionDateNy,
-      openingRangeMinutes: args.params.session.openingRangeMinutes
-    })) {
+    // OPTIMIZATION #1: Opening range capture using pre-calculated boundaries
+    const candleUtcMs = candle.timeUtcMs;
+    const inOpeningWindow = candleUtcMs >= sessionStartMs && candleUtcMs < openingWindowEndMs;
+    
+    if (inOpeningWindow) {
       openingCandles.push(candle);
     }
 
-    // Opening range levels become available only after opening window ends (no lookahead).
-    if (orLevels === null && isAfterOpeningWindow({
-      timeUtcMs: candle.timeUtcMs,
-      sessionDateNy,
-      openingRangeMinutes: args.params.session.openingRangeMinutes
-    })) {
+    // OPTIMIZATION #1: Opening range levels become available after window ends
+    const afterOpeningWindow = candleUtcMs >= openingWindowEndMs;
+    if (orLevels === null && afterOpeningWindow) {
       // Missing opening candle policy: strict skip (docs/13 Option A).
       const expectedCount = Math.max(1, Math.ceil(args.params.session.openingRangeMinutes / intervalMinutes));
       if (openingCandles.length < expectedCount) {
         sessionEntryAllowed = false;
-        warnings.push({
-          code: "DATA_QUALITY_MISSING_OPENING_RANGE",
-          message: "Missing candles in opening range; skipping this session for entries.",
-          context: {
-            sessionDateNy,
-            expectedCount,
-            actualCount: openingCandles.length,
-            interval: args.params.interval
-          }
-        });
+        // OPTIMIZATION #8: Skip warnings in optimization mode
+        if (!isOptimization) {
+          warnings.push({
+            code: "DATA_QUALITY_MISSING_OPENING_RANGE",
+            message: "Missing candles in opening range; skipping this session for entries.",
+            context: {
+              sessionDateNy,
+              expectedCount,
+              actualCount: openingCandles.length,
+              interval: args.params.interval
+            }
+          });
+        }
       } else {
-        orLevels = computeOrLevels(openingCandles);
+        // OPTIMIZATION #4: Inline computeOrLevels to avoid function call overhead
+        if (openingCandles.length > 0) {
+          let orHigh = openingCandles[0]!.high;
+          let orLow = openingCandles[0]!.low;
+          // OPTIMIZATION #9: Use traditional for loop
+          for (let j = 0; j < openingCandles.length; j++) {
+            const c = openingCandles[j]!;
+            if (c.high > orHigh) orHigh = c.high;
+            if (c.low < orLow) orLow = c.low;
+          }
+          orLevels = { orHigh, orLow, orMid: (orHigh + orLow) / 2 };
+        }
+        
         if (orLevels !== null && orLevels.orHigh === orLevels.orLow) {
           sessionEntryAllowed = false;
-          warnings.push({
-            code: "DATA_QUALITY_FLAT_OPENING_RANGE",
-            message: "Opening range is flat (orHigh == orLow); skipping this session for entries.",
-            context: { sessionDateNy }
-          });
+          // OPTIMIZATION #8: Skip warnings in optimization mode
+          if (!isOptimization) {
+            warnings.push({
+              code: "DATA_QUALITY_FLAT_OPENING_RANGE",
+              message: "Opening range is flat (orHigh == orLow); skipping this session for entries.",
+              context: { sessionDateNy }
+            });
+          }
         }
       }
     }
@@ -312,13 +359,10 @@ export function runBacktest(args: Readonly<{
         args.params.risk.barsAfterEntry > 0 &&
         barsSinceEntry >= args.params.risk.barsAfterEntry;
 
+      // OPTIMIZATION #2: Use pre-calculated session end boundary
       const sessionEndTouched =
         args.params.risk.timeExitMode === "session_end" &&
-        isAfterSessionEnd({
-          timeUtcMs: candle.timeUtcMs,
-          sessionDateNy: openPosition.sessionDateNy,
-          sessionEndTime: args.params.risk.sessionEndTime
-        });
+        candleUtcMs >= sessionEndMs;
 
       // Determine exit ordering on the current bar.
       let exitReason: TradeInsert["exit_reason"] | null = null;
@@ -362,6 +406,14 @@ export function runBacktest(args: Readonly<{
         const drawdownPct = peakEquity === 0 ? 0 : ((equity - peakEquity) / peakEquity) * 100;
         maxDrawdownPct = Math.min(maxDrawdownPct, drawdownPct);
 
+        // OPTIMIZATION #5: Record equity point only if not optimizing
+        if (!isOptimization) {
+          equityPoints.push({
+            timeUtc: new Date(candle.timeUtcMs).toISOString(),
+            equity: roundTo(equity, 10)
+          });
+        }
+
         if (pnl >= 0) {
           winCount += 1;
           grossProfit += pnl;
@@ -372,19 +424,20 @@ export function runBacktest(args: Readonly<{
         const riskDollars = openPosition.initialRiskPerUnit * openPosition.quantity;
         const rMultiple = riskDollars > 0 ? pnl / riskDollars : null;
 
+        // OPTIMIZATION #6 & #7: Skip UUID generation and reduce rounding in optimization mode
         trades.push({
-          id: randomUUID(),
+          id: isOptimization ? "" : randomUUID(),
           run_id: args.runId,
           session_date_ny: openPosition.sessionDateNy,
           direction: openPosition.direction,
           entry_time_utc: new Date(openPosition.entryTimeUtcMs).toISOString(),
-          entry_price: roundTo(openPosition.entryPrice, 10),
+          entry_price: isOptimization ? openPosition.entryPrice : roundTo(openPosition.entryPrice, 10),
           exit_time_utc: new Date(candle.timeUtcMs).toISOString(),
-          exit_price: roundTo(exitPrice, 10),
-          quantity: roundTo(openPosition.quantity, 12),
-          fee_total: roundTo(totalFees, 10),
-          pnl: roundTo(pnl, 10),
-          r_multiple: rMultiple === null ? null : roundTo(rMultiple, 10),
+          exit_price: isOptimization ? exitPrice : roundTo(exitPrice, 10),
+          quantity: isOptimization ? openPosition.quantity : roundTo(openPosition.quantity, 12),
+          fee_total: isOptimization ? totalFees : roundTo(totalFees, 10),
+          pnl: isOptimization ? pnl : roundTo(pnl, 10),
+          r_multiple: rMultiple === null ? null : (isOptimization ? rMultiple : roundTo(rMultiple, 10)),
           exit_reason: exitReason
         });
 
@@ -434,12 +487,14 @@ export function runBacktest(args: Readonly<{
         (args.params.entry.entryMode === "stop_breakout" ? candle.low <= shortTrigger : candle.close <= shortTrigger);
 
       if (longTriggered && shortTriggered) {
-        // Ambiguous without intrabar order; skip conservatively.
-        warnings.push({
-          code: "ENTRY_AMBIGUOUS_BOTH_DIRECTIONS",
-          message: "Both long and short triggers occurred on the same bar; skipping entry conservatively.",
-          context: { sessionDateNy, timeUtc: new Date(candle.timeUtcMs).toISOString() }
-        });
+        // OPTIMIZATION #8: Skip warnings in optimization mode
+        if (!isOptimization) {
+          warnings.push({
+            code: "ENTRY_AMBIGUOUS_BOTH_DIRECTIONS",
+            message: "Both long and short triggers occurred on the same bar; skipping entry conservatively.",
+            context: { sessionDateNy, timeUtc: new Date(candle.timeUtcMs).toISOString() }
+          });
+        }
         continue;
       }
 
@@ -478,11 +533,14 @@ export function runBacktest(args: Readonly<{
 
       const stopDistance = Math.abs(entryPrice - stopPrice);
       if (stopDistance <= 0) {
-        warnings.push({
-          code: "TRADE_SKIPPED_INVALID_STOP_DISTANCE",
-          message: "Stop distance is 0/invalid; skipping entry.",
-          context: { sessionDateNy, entryPrice, stopPrice }
-        });
+        // OPTIMIZATION #8: Skip warnings in optimization mode
+        if (!isOptimization) {
+          warnings.push({
+            code: "TRADE_SKIPPED_INVALID_STOP_DISTANCE",
+            message: "Stop distance is 0/invalid; skipping entry.",
+            context: { sessionDateNy, entryPrice, stopPrice }
+          });
+        }
         continue;
       }
 
@@ -500,11 +558,14 @@ export function runBacktest(args: Readonly<{
       }
 
       if (!Number.isFinite(quantity) || quantity <= 0) {
-        warnings.push({
-          code: "TRADE_SKIPPED_INVALID_QUANTITY",
-          message: "Computed quantity is invalid; skipping entry.",
-          context: { sessionDateNy, quantity }
-        });
+        // OPTIMIZATION #8: Skip warnings in optimization mode
+        if (!isOptimization) {
+          warnings.push({
+            code: "TRADE_SKIPPED_INVALID_QUANTITY",
+            message: "Computed quantity is invalid; skipping entry.",
+            context: { sessionDateNy, quantity }
+          });
+        }
         continue;
       }
 
@@ -569,6 +630,14 @@ export function runBacktest(args: Readonly<{
       const drawdownPct = peakEquity === 0 ? 0 : ((equity - peakEquity) / peakEquity) * 100;
       maxDrawdownPct = Math.min(maxDrawdownPct, drawdownPct);
 
+      // OPTIMIZATION #5: Record final equity point only if not optimizing
+      if (!isOptimization) {
+        equityPoints.push({
+          timeUtc: new Date(last.timeUtcMs).toISOString(),
+          equity: roundTo(equity, 10)
+        });
+      }
+
       if (pnl >= 0) {
         winCount += 1;
         grossProfit += pnl;
@@ -579,27 +648,31 @@ export function runBacktest(args: Readonly<{
       const riskDollars = position.initialRiskPerUnit * position.quantity;
       const rMultiple = riskDollars > 0 ? pnl / riskDollars : null;
 
+      // OPTIMIZATION #6 & #7: Skip UUID generation and reduce rounding in optimization mode
       trades.push({
-        id: randomUUID(),
+        id: isOptimization ? "" : randomUUID(),
         run_id: args.runId,
         session_date_ny: position.sessionDateNy,
         direction: position.direction,
         entry_time_utc: new Date(position.entryTimeUtcMs).toISOString(),
-        entry_price: roundTo(position.entryPrice, 10),
+        entry_price: isOptimization ? position.entryPrice : roundTo(position.entryPrice, 10),
         exit_time_utc: new Date(last.timeUtcMs).toISOString(),
-        exit_price: roundTo(exitPrice, 10),
-        quantity: roundTo(position.quantity, 12),
-        fee_total: roundTo(totalFees, 10),
-        pnl: roundTo(pnl, 10),
-        r_multiple: rMultiple === null ? null : roundTo(rMultiple, 10),
+        exit_price: isOptimization ? exitPrice : roundTo(exitPrice, 10),
+        quantity: isOptimization ? position.quantity : roundTo(position.quantity, 12),
+        fee_total: isOptimization ? totalFees : roundTo(totalFees, 10),
+        pnl: isOptimization ? pnl : roundTo(pnl, 10),
+        r_multiple: rMultiple === null ? null : (isOptimization ? rMultiple : roundTo(rMultiple, 10)),
         exit_reason: "time_exit"
       });
 
-      warnings.push({
-        code: "END_OF_DATA_FORCE_EXIT",
-        message: "Position was open at end of data; exited at final close.",
-        context: { exitTimeUtc: new Date(last.timeUtcMs).toISOString() }
-      });
+      // OPTIMIZATION #8: Skip warnings in optimization mode
+      if (!isOptimization) {
+        warnings.push({
+          code: "END_OF_DATA_FORCE_EXIT",
+          message: "Position was open at end of data; exited at final close.",
+          context: { exitTimeUtc: new Date(last.timeUtcMs).toISOString() }
+        });
+      }
     }
   }
 
@@ -624,7 +697,12 @@ export function runBacktest(args: Readonly<{
       profitFactor: Number.isFinite(profitFactor) ? roundTo(profitFactor, 10) : profitFactor,
       tradeCount
     },
+    equityPoints,
     warnings
   };
 }
+
+
+
+
 

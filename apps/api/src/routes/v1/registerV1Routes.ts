@@ -19,3 +19,7 @@ export const registerV1Routes: FastifyPluginAsync = async (server) => {
   await server.register(backtestsRoutes);
 };
 
+
+
+
+

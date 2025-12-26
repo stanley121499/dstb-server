@@ -110,7 +110,8 @@ export type FetchJsonOptions = Readonly<{
  * - Parses standard error payloads from `docs/15-api-contracts.md`.
  */
 export async function fetchJson(options: FetchJsonOptions): Promise<unknown> {
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  // Increased timeout for large dataset queries (10K+ runs)
+  const timeoutMs = options.timeoutMs ?? 60_000;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -155,3 +156,7 @@ export async function fetchJson(options: FetchJsonOptions): Promise<unknown> {
     window.clearTimeout(timeout);
   }
 }
+
+
+
+

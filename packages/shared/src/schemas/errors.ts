@@ -27,3 +27,7 @@ export const ErrorResponseSchema = z.object({
 
 export type ErrorDetail = z.infer<typeof ErrorDetailSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+
+
+

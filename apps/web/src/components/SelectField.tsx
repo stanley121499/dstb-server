@@ -1,4 +1,6 @@
 import React, { useCallback } from "react";
+import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 export type SelectOption<T extends string> = Readonly<{
   value: T;
@@ -14,14 +16,13 @@ export type SelectFieldProps<T extends string> = Readonly<{
 }>;
 
 /**
- * Typed select field.
+ * Typed select field with modern dropdown (no overflow issues).
  */
 export function SelectField<T extends string>(props: SelectFieldProps<T>): React.ReactElement {
   const onChange = useCallback(
-    (ev: React.ChangeEvent<HTMLSelectElement>) => {
+    (value: string) => {
       // Avoid unsafe casts: map the raw string back to a known option value.
-      const raw = ev.target.value;
-      const match = props.options.find((o) => o.value === raw);
+      const match = props.options.find((o) => o.value === value);
 
       if (match) {
         props.onChange(match.value);
@@ -31,16 +32,24 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): React
   );
 
   return (
-    <label className="col" style={{ gap: 6 }}>
-      <span className="label">{props.label}</span>
-      <select className="select" value={props.value} onChange={onChange}>
-        {props.options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {props.help ? <span className="muted" style={{ fontSize: 12 }}>{props.help}</span> : null}
-    </label>
+    <div className="space-y-2">
+      <Label>{props.label}</Label>
+      <Select value={props.value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {props.options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {props.help && <p className="text-caption text-muted-foreground">{props.help}</p>}
+    </div>
   );
 }
+
+
+

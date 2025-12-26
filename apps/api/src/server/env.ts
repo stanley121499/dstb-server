@@ -30,6 +30,15 @@ export type Env = Readonly<{
    * Example: "https://mydomain.com,https://staging.mydomain.com"
    */
   CORS_ALLOWED_ORIGINS: string;
+  
+  /**
+   * Maximum number of concurrent backtest runs.
+   * 
+   * Default: "3" (good balance of speed and API rate limits)
+   * Set to "1" for sequential processing (safer, slower)
+   * Set to "5" or higher for faster optimizations (watch Binance rate limits!)
+   */
+  BACKTEST_CONCURRENCY?: string;
 }>;
 
 const envSchema = z
@@ -49,7 +58,9 @@ const envSchema = z
 
     ENGINE_VERSION: z.string().trim().min(1).optional().default("dev"),
 
-    CORS_ALLOWED_ORIGINS: z.string().trim().optional().default("")
+    CORS_ALLOWED_ORIGINS: z.string().trim().optional().default(""),
+    
+    BACKTEST_CONCURRENCY: z.string().trim().optional().default("3")
   })
   .passthrough();
 
@@ -82,4 +93,8 @@ export function readEnv(rawEnv: NodeJS.ProcessEnv): Env {
     CORS_ALLOWED_ORIGINS: parsed.CORS_ALLOWED_ORIGINS
   };
 }
+
+
+
+
 

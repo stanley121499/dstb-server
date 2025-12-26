@@ -1,12 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { NumberField } from "../components/NumberField";
+import { PageHeader } from "../components/layout/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { RadioGroup } from "../components/RadioGroup";
-import { SelectField } from "../components/SelectField";
 import { JsonViewer } from "../components/JsonViewer";
+import { RecentRunsList, type RecentRun } from "../components/RecentRunsList";
 
-import { apiGetParameterSet, apiListParameterSets, apiRunBacktest, type ParameterSet } from "../lib/dstbApi";
+import { apiGetParameterSet, apiListParameterSets, apiRunBacktest, apiListBacktestRuns, type ParameterSet } from "../lib/dstbApi";
 import { parseDatetimeLocalAsUtcIso } from "../lib/dateTime";
 import { parseNumber } from "../lib/numberParsing";
 import { createDefaultStrategyParams, parseStrategyParams, type IntervalId, type StrategyParams, type SymbolId } from "../domain/strategyParams";
@@ -93,6 +104,9 @@ export function RunBacktestPage(): React.ReactElement {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [recentRuns, setRecentRuns] = useState<readonly RecentRun[]>([]);
+  const [recentRunsLoading, setRecentRunsLoading] = useState<boolean>(false);
+
   const parameterSetOptions = useMemo(() => {
     return parameterSets.map((ps) => ({
       value: ps.id,
@@ -121,9 +135,33 @@ export function RunBacktestPage(): React.ReactElement {
     }
   }, [selectedParameterSetId]);
 
+  const loadRecentRuns = useCallback(async () => {
+    setRecentRunsLoading(true);
+
+    try {
+      const page = await apiListBacktestRuns(0, 5);
+      setRecentRuns(
+        page.items.map((run) => ({
+          id: run.id,
+          createdAt: run.createdAt,
+          status: run.status,
+          symbol: run.symbol,
+          interval: run.interval,
+          totalReturnPct: run.totalReturnPct,
+          tradeCount: run.tradeCount
+        }))
+      );
+    } catch {
+      // Non-critical; silently fail.
+    } finally {
+      setRecentRunsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadParameterSets();
-  }, [loadParameterSets]);
+    void loadRecentRuns();
+  }, [loadParameterSets, loadRecentRuns]);
 
   useEffect(() => {
     if (mode !== "parameter_set") {
@@ -271,110 +309,185 @@ export function RunBacktestPage(): React.ReactElement {
   }, [endLocal, initialEquity, inlineJson, interval, mode, navigate, selectedParameterSetId, startLocal, symbol]);
 
   return (
-    <div className="container">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <div className="col">
-          <p className="h1" style={{ marginBottom: 2 }}>
-            Run Backtest
-          </p>
-          <span className="muted">Runs `POST /v1/backtests` and navigates to results.</span>
-        </div>
+    <div className="page-container">
+      <PageHeader
+        title="Run Backtest"
+        description="Configure and execute a backtest against historical data"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => void loadParameterSets()} disabled={isLoading}>
+              Refresh Sets
+            </Button>
+            <Button onClick={() => void onRun()} disabled={isLoading}>
+              {isLoading ? "Running..." : "Run Backtest"}
+            </Button>
+          </div>
+        }
+      />
 
-        <div className="row" style={{ alignItems: "center" }}>
-          <button className="btn" type="button" onClick={() => void loadParameterSets()} disabled={isLoading}>
-            Refresh parameter sets
-          </button>
-          <button className="btn btnPrimary" type="button" onClick={() => void onRun()} disabled={isLoading}>
-            {isLoading ? "Running..." : "Run"}
-          </button>
-        </div>
-      </div>
+      {error && (
+        <Card className="mb-6 border-destructive/50 bg-destructive/5 p-4">
+          <p className="text-small text-destructive">{error}</p>
+        </Card>
+      )}
 
-      <div className="hr" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Configuration Form */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Backtest Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Parameter Source Selection */}
+              <div className="space-y-2">
+                <Label>Parameter Source</Label>
+                <RadioGroup<RunMode>
+                  label=""
+                  value={mode}
+                  options={[
+                    { value: "parameter_set", label: "Saved parameter set" },
+                    { value: "inline_json", label: "Inline params (JSON)" }
+                  ]}
+                  onChange={setMode}
+                />
+              </div>
 
-      {error ? <div className="errorBox" style={{ marginBottom: 12 }}>{error}</div> : null}
+              {/* Parameter Set or Inline JSON */}
+              {mode === "parameter_set" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="parameter-set">Parameter Set</Label>
+                  <Select value={selectedParameterSetId} onValueChange={setSelectedParameterSetId}>
+                    <SelectTrigger id="parameter-set">
+                      <SelectValue placeholder="Select a parameter set" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parameterSetOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-caption text-muted-foreground">
+                    Used as parameterSetId in the request
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="inline-json">Inline Parameters (JSON)</Label>
+                  <textarea
+                    id="inline-json"
+                    value={inlineJson}
+                    onChange={(ev) => setInlineJson(ev.target.value)}
+                    className="flex min-h-[200px] w-full rounded-sm border border-input bg-background px-3 py-2 text-small ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 font-mono"
+                  />
+                  <p className="text-caption text-muted-foreground">
+                    Parsed and validated client-side before sending
+                  </p>
+                </div>
+              )}
 
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="cardHeader">
-          <p className="h2">Inputs</p>
-        </div>
-        <div className="cardBody">
-          <RadioGroup<RunMode>
-            label="Params source"
-            value={mode}
-            options={[
-              { value: "parameter_set", label: "Saved parameter set" },
-              { value: "inline_json", label: "Inline params (JSON)" }
-            ]}
-            onChange={setMode}
-          />
+              {/* Symbol & Interval */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="symbol">Symbol</Label>
+                  <Select value={symbol} onValueChange={(v) => setSymbol(v as SymbolId)}>
+                    <SelectTrigger id="symbol">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {symbolOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          <div style={{ height: 10 }} />
+                <div className="space-y-2">
+                  <Label htmlFor="interval">Interval</Label>
+                  <Select value={interval} onValueChange={(v) => setInterval(v as IntervalId)}>
+                    <SelectTrigger id="interval">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {intervalOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-          {mode === "parameter_set" ? (
-            <SelectField<string>
-              label="Parameter set"
-              value={selectedParameterSetId}
-              options={parameterSetOptions}
-              onChange={setSelectedParameterSetId}
-              help="Used as parameterSetId in the request."
-            />
-          ) : (
-            <label className="col" style={{ gap: 6 }}>
-              <span className="label">Inline params JSON</span>
-              <textarea className="textarea" value={inlineJson} onChange={(ev) => setInlineJson(ev.target.value)} />
-              <span className="muted" style={{ fontSize: 12 }}>
-                Parsed and validated client-side before sending.
-              </span>
-            </label>
+              {/* Date Range & Initial Equity */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-time">Start Time (UTC)</Label>
+                  <Input
+                    id="start-time"
+                    type="datetime-local"
+                    value={startLocal}
+                    onChange={(ev) => setStartLocal(ev.target.value)}
+                  />
+                  <p className="text-caption text-muted-foreground">Interpreted as UTC</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="end-time">End Time (UTC)</Label>
+                  <Input
+                    id="end-time"
+                    type="datetime-local"
+                    value={endLocal}
+                    onChange={(ev) => setEndLocal(ev.target.value)}
+                  />
+                  <p className="text-caption text-muted-foreground">Interpreted as UTC</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="initial-equity">Initial Equity (optional)</Label>
+                  <Input
+                    id="initial-equity"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={initialEquity}
+                    onChange={(ev) => setInitialEquity(ev.target.value)}
+                    placeholder="10000"
+                  />
+                  <p className="text-caption text-muted-foreground">
+                    Backend default if empty
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Parsed Preview Card */}
+          {mode === "inline_json" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Parsed Parameters Preview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <JsonViewer value={parseStrategyParams(safeJsonParse(inlineJson))} />
+              </CardContent>
+            </Card>
           )}
+        </div>
 
-          <div style={{ height: 10 }} />
-
-          <div className="row">
-            <SelectField<SymbolId> label="Symbol" value={symbol} options={symbolOptions} onChange={setSymbol} />
-            <SelectField<IntervalId> label="Interval" value={interval} options={intervalOptions} onChange={setInterval} />
-          </div>
-
-          <div style={{ height: 10 }} />
-
-          <div className="row">
-            <label className="col" style={{ gap: 6, minWidth: 260 }}>
-              <span className="label">Start time (UTC)</span>
-              <input className="input" type="datetime-local" value={startLocal} onChange={(ev) => setStartLocal(ev.target.value)} />
-              <span className="muted" style={{ fontSize: 12 }}>Interpreted as UTC.</span>
-            </label>
-
-            <label className="col" style={{ gap: 6, minWidth: 260 }}>
-              <span className="label">End time (UTC)</span>
-              <input className="input" type="datetime-local" value={endLocal} onChange={(ev) => setEndLocal(ev.target.value)} />
-              <span className="muted" style={{ fontSize: 12 }}>Interpreted as UTC.</span>
-            </label>
-
-            <NumberField
-              label="Initial equity (optional)"
-              value={initialEquity}
-              onChange={setInitialEquity}
-              min={0}
-              step={1}
-              help="If empty, the backend may use a default."
-            />
-          </div>
+        {/* Recent Runs Sidebar */}
+        <div>
+          <RecentRunsList runs={recentRuns} isLoading={recentRunsLoading} />
         </div>
       </div>
-
-      {mode === "inline_json" ? (
-        <div className="card">
-          <div className="cardHeader">
-            <p className="h2">Parsed inline params preview</p>
-          </div>
-          <div className="cardBody">
-            <JsonViewer value={parseStrategyParams(safeJsonParse(inlineJson))} />
-          </div>
-        </div>
-      ) : null}
-
-      <div style={{ height: 24 }} />
     </div>
   );
 }
+
+
+
+

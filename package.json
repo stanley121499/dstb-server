@@ -15,6 +15,7 @@
     "typecheck": "npm run -ws typecheck --if-present",
     "lint": "npm run -ws lint --if-present",
     "clean": "npm run -ws clean --if-present",
+    "import-results": "cd apps/api && npx tsx src/scripts/importOptimizationResults.ts",
     "preinstall": "npx --yes only-allow npm"
   },
   "devDependencies": {
@@ -23,3 +24,7 @@
     "typescript": "^5.9.3"
   }
 }
+
+
+
+

@@ -31,3 +31,10 @@ Desktop.ini
 
 # Supabase local
 supabase/.temp/
+
+# Optimization results (local-only, import to DB after optimization)
+optimization-results/
+
+
+
+

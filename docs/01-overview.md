@@ -43,3 +43,7 @@ If backtest and live trading use different logic, results will not transfer and 
 
 
 
+
+
+
+
