@@ -1,0 +1,53 @@
+{
+  "name": "BTC 15m Paper Test",
+  "exchange": "paper",
+  "symbol": "ETH-USD",
+  "interval": "1h",
+  "initialBalance": 10000,
+  "riskManagement": {
+    "maxDailyLossPct": 5,
+    "maxPositionSizePct": 25
+  },
+  "params": {
+    "version": "1.0",
+    "symbol": "ETH-USD",
+    "interval": "1h",
+    "session": {
+      "timezone": "America/New_York",
+      "startTime": "09:30",
+      "openingRangeMinutes": 60
+    },
+    "entry": {
+      "directionMode": "long_short",
+      "entryMode": "close_confirm",
+      "breakoutBufferBps": 5,
+      "maxTradesPerSession": 1
+    },
+    "atr": {
+      "atrLength": 20,
+      "atrFilter": {
+        "enabled": true,
+        "minAtrBps": 30,
+        "maxAtrBps": 300
+      }
+    },
+    "risk": {
+      "sizingMode": "fixed_risk_pct",
+      "riskPctPerTrade": 3,
+      "fixedNotional": 1000,
+      "stopMode": "or_midpoint",
+      "atrStopMultiple": 1.5,
+      "takeProfitMode": "r_multiple",
+      "tpRMultiple": 3,
+      "trailingStopMode": "atr_trailing",
+      "atrTrailMultiple": 3,
+      "timeExitMode": "disabled",
+      "barsAfterEntry": 0,
+      "sessionEndTime": "15:00"
+    },
+    "execution": {
+      "feeBps": 10,
+      "slippageBps": 5
+    }
+  }
+}

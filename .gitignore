@@ -21,6 +21,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+logs/
 
 # OS / editor
 .DS_Store
@@ -34,6 +35,10 @@ supabase/.temp/
 
 # Optimization results (local-only, import to DB after optimization)
 optimization-results/
+
+# Bot configs with API keys (never commit these!)
+**/bot-live*.json
+**/bot-config.json
 
 
 

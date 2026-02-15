@@ -28,7 +28,7 @@ export const IntervalSchema = z.enum([
 /**
  * Supported Phase 1 instruments (per docs).
  */
-export const SymbolSchema = z.enum(["BTC-USD", "ETH-USD"]);
+export const SymbolSchema = z.enum(["BTC-USD", "ETH-USD", "ZEC-USD"]);
 
 export const DirectionModeSchema = z.enum(["long_only", "short_only", "long_short"]);
 export const EntryModeSchema = z.enum(["stop_breakout", "close_confirm"]);

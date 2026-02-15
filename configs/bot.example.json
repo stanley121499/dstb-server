@@ -1,0 +1,26 @@
+{
+  "name": "ORB BTC Example",
+  "strategy": "orb-atr",
+  "exchange": "bitunix",
+  "symbol": "BTCUSDT",
+  "interval": "15m",
+  "initialBalance": 5000,
+  "riskManagement": {
+    "maxDailyLossPct": 5,
+    "maxPositionSizePct": 20
+  },
+  "params": {
+    "session": "NY",
+    "atrLength": 14,
+    "openingRangeMinutes": 30,
+    "entry": {
+      "directionMode": "long_only"
+    }
+  },
+  "bitunix": {
+    "apiKey": "${BITUNIX_API_KEY}",
+    "secretKey": "${BITUNIX_SECRET_KEY}",
+    "testMode": true,
+    "marketType": "futures"
+  }
+}

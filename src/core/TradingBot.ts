@@ -1,0 +1,666 @@
+import type { IExchangeAdapter } from "../../apps/api/src/exchange/IExchangeAdapter.js";
+import type { ExchangeCandle, Order as ExchangeOrder, Position as ExchangePosition } from "../../apps/api/src/exchange/types.js";
+import { intervalToMs } from "../../apps/api/src/utils/interval.js";
+
+import type { Candle, IStrategy, Position as StrategyPosition, Signal } from "../strategies/IStrategy";
+import { Logger } from "./Logger";
+import { OrderExecutor } from "./OrderExecutor";
+import { PositionManager } from "./PositionManager";
+import { RiskManager } from "./RiskManager";
+import { StateManager } from "./StateManager";
+import type { Bot, BotConfig, Position } from "./types";
+
+/**
+ * Optional alerting adapter for error notifications.
+ */
+export type AlertingAdapter = Readonly<{
+  sendAlert: (args: Readonly<{ level: "CRITICAL" | "WARNING" | "INFO"; message: string; botId: string }>) => Promise<void>;
+}>;
+
+/**
+ * TradingBot constructor options.
+ */
+export type TradingBotOptions = Readonly<{
+  botId?: string;
+  config: BotConfig;
+  strategy: IStrategy;
+  exchange: IExchangeAdapter;
+  stateManager: StateManager;
+  logger: Logger;
+  alerting?: AlertingAdapter;
+  maxIterations?: number;
+  heartbeatIntervalMs?: number;
+  candleIntervalMsOverride?: number;
+}>;
+
+/**
+ * TradingBot orchestrates the strategy, exchange adapter, and persistence.
+ */
+export class TradingBot {
+  private id: string;
+  private readonly config: BotConfig;
+  private readonly strategy: IStrategy;
+  private readonly exchange: IExchangeAdapter;
+  private readonly stateManager: StateManager;
+  private readonly logger: Logger;
+  private readonly alerting?: AlertingAdapter;
+  private readonly positionManager: PositionManager;
+  private readonly orderExecutor: OrderExecutor;
+  private readonly riskManager: RiskManager;
+  private readonly heartbeatIntervalMs: number;
+  private readonly maxIterations?: number;
+  private readonly candleIntervalMsOverride?: number;
+
+  private isRunning = false;
+  private errorCount = 0;
+  private lastHeartbeatAt: number | null = null;
+  private lastCandleTime: number | null = null;
+
+  /**
+   * Creates a new TradingBot instance.
+   *
+   * Inputs:
+   * - options: TradingBotOptions with dependencies and config.
+   *
+   * Outputs:
+   * - TradingBot instance.
+   *
+   * Error behavior:
+   * - Throws on invalid dependencies or config.
+   */
+  constructor(options: TradingBotOptions) {
+    // Step 1: Validate dependencies.
+    if (!this.isNonEmptyString(options.config?.name)) {
+      throw new Error("TradingBot requires a valid BotConfig.");
+    }
+    if (!this.isNonEmptyString(options.strategy?.name)) {
+      throw new Error("TradingBot requires a valid strategy instance.");
+    }
+    if (options.exchange === null || options.exchange === undefined) {
+      throw new Error("TradingBot requires a valid exchange adapter.");
+    }
+    if (!(options.stateManager instanceof StateManager)) {
+      throw new Error("TradingBot requires a valid StateManager instance.");
+    }
+    if (!(options.logger instanceof Logger)) {
+      throw new Error("TradingBot requires a valid Logger instance.");
+    }
+
+    // Step 2: Store dependencies and defaults.
+    this.id = options.botId ?? "";
+    this.config = options.config;
+    this.strategy = options.strategy;
+    this.exchange = options.exchange;
+    this.stateManager = options.stateManager;
+    this.logger = options.logger;
+    this.alerting = options.alerting;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
+    this.maxIterations = options.maxIterations;
+    this.candleIntervalMsOverride = options.candleIntervalMsOverride;
+
+    // Step 3: Initialize managers.
+    this.positionManager = new PositionManager(this.stateManager, this.logger);
+    this.orderExecutor = new OrderExecutor(this.exchange, this.stateManager, this.logger);
+    this.riskManager = new RiskManager(this.stateManager, this.logger);
+  }
+
+  /**
+   * Starts the trading bot lifecycle.
+   *
+   * Inputs:
+   * - None.
+   *
+   * Outputs:
+   * - Promise resolved when the bot stops.
+   *
+   * Error behavior:
+   * - Throws on unrecoverable startup failures.
+   */
+  async start(): Promise<void> {
+    // Step 1: Mark bot as running and reset error count.
+    this.isRunning = true;
+    this.errorCount = 0;
+
+    this.logger.info("Trading bot starting", {
+      event: "bot_start",
+      botName: this.config.name
+    });
+
+    // Step 2: Ensure exchange connection is active.
+    const isConnected = await this.exchange.isConnected();
+    if (!isConnected) {
+      await this.exchange.connect();
+    }
+
+    // Step 3: Load state from database.
+    await this.loadState();
+
+    // Step 4: Reconcile positions with exchange.
+    await this.reconcilePositions();
+
+    // Step 5: Initialize strategy with historical candles.
+    await this.initializeStrategy();
+
+    // Step 6: Start main loop.
+    await this.mainLoop();
+  }
+
+  /**
+   * Stops the trading bot and disconnects from the exchange.
+   */
+  async stop(): Promise<void> {
+    // Step 1: Mark bot as stopped.
+    this.isRunning = false;
+
+    // Step 2: Disconnect exchange.
+    await this.exchange.disconnect();
+
+    this.logger.info("Trading bot stopped", {
+      event: "bot_stop",
+      botId: this.id
+    });
+  }
+
+  /**
+   * Returns the current bot identifier.
+   */
+  getId(): string {
+    return this.id;
+  }
+
+  /**
+   * Main trading loop that processes candles and signals.
+   */
+  private async mainLoop(): Promise<void> {
+    let iterations = 0;
+
+    while (this.isRunning) {
+      try {
+        // Step 1: Fetch latest candle.
+        const candle = await this.fetchLatestCandle();
+        if (candle === null) {
+          await this.waitForNextCandle();
+          continue;
+        }
+
+        // Step 2: Avoid re-processing the same candle.
+        if (this.lastCandleTime !== null && candle.timeUtcMs <= this.lastCandleTime) {
+          await this.waitForNextCandle();
+          continue;
+        }
+        this.lastCandleTime = candle.timeUtcMs;
+
+        // Step 3: Load current DB position.
+        const dbPosition = await this.positionManager.getOpenPosition(this.id);
+        const strategyPosition = dbPosition ? this.toStrategyPosition(dbPosition) : null;
+
+        // Step 4: Ask strategy for a signal.
+        const signal = this.strategy.onCandle(this.toStrategyCandle(candle), strategyPosition);
+
+        // Step 5: Execute signal actions.
+        if (signal.type === "ENTRY") {
+          await this.handleEntry(signal, dbPosition);
+        } else if (signal.type === "EXIT") {
+          await this.handleExit(signal, dbPosition);
+        } else {
+          this.logger.debug("Strategy hold signal", {
+            event: "strategy_hold",
+            reason: signal.reason
+          });
+        }
+
+        // Step 6: Update heartbeat if due.
+        await this.updateHeartbeatIfNeeded();
+
+        // Step 7: Respect interval pacing.
+        await this.waitForNextCandle();
+
+        iterations += 1;
+        if (this.maxIterations !== undefined && iterations >= this.maxIterations) {
+          await this.stop();
+        }
+      } catch (error) {
+        await this.handleError(error);
+        await this.waitForNextCandle();
+      }
+    }
+  }
+
+  /**
+   * Handles entry signals with risk checks and order placement.
+   */
+  private async handleEntry(signal: Signal, dbPosition: Position | null): Promise<void> {
+    // Step 1: Validate entry signal shape.
+    if (signal.type !== "ENTRY" || signal.side === undefined) {
+      this.logger.warn("Ignored invalid ENTRY signal", {
+        event: "signal_entry_invalid",
+        reason: signal.reason
+      });
+      return;
+    }
+
+    // Step 2: Fetch market price and balance.
+    const marketPrice = signal.price ?? (await this.exchange.getLastPrice());
+    if (!this.isPositiveNumber(marketPrice)) {
+      this.logger.warn("Entry blocked: invalid market price", {
+        event: "entry_invalid_price",
+        price: marketPrice
+      });
+      return;
+    }
+
+    const balance = await this.exchange.getBalance();
+
+    // 🔍 CRITICAL: Log balance details for debugging
+    this.logger.info("💰 Balance fetched for position sizing", {
+      event: "balance_fetch",
+      available: balance.available,
+      locked: balance.locked,
+      total: balance.total,
+      currency: balance.currency,
+      marketPrice,
+      stopLoss: signal.stopLoss,
+      riskPerUnit: signal.stopLoss ? Math.abs(marketPrice - signal.stopLoss) : 0
+    });
+
+    if (!this.isPositiveNumber(balance.total)) {
+      this.logger.warn("Entry blocked: invalid equity", {
+        event: "entry_invalid_equity",
+        equity: balance.total
+      });
+      return;
+    }
+
+    // ⚠️ SAFETY CHECK: Verify balance is reasonable (not leveraged equity)
+    let effectiveBalance = balance.total;
+    if (balance.total > this.config.initialBalance * 2) {
+      effectiveBalance = Math.min(balance.total, this.config.initialBalance);
+      this.logger.warn("⚠️ Balance appears inflated (possibly leveraged equity). Using conservative value.", {
+        event: "balance_warning",
+        reportedBalance: balance.total,
+        configInitialBalance: this.config.initialBalance,
+        usingBalance: effectiveBalance
+      });
+    }
+
+    // Step 3: Determine order quantity.
+    const quantity = this.calculateQuantity(signal, marketPrice, effectiveBalance);
+
+    const positionNotional = quantity * marketPrice;
+
+    // 🚨 CRITICAL SAFETY CHECK: Position size sanity check
+    if (positionNotional > balance.total * 10) {
+      const errorMsg =
+        `🚨 CRITICAL: Position size too large! ` +
+        `Notional: ${positionNotional.toFixed(2)} ${balance.currency}, ` +
+        `Balance: ${balance.total.toFixed(2)} ${balance.currency}. ` +
+        `This would be ${(positionNotional / balance.total).toFixed(1)}x your balance. ` +
+        `Check your leverage settings and risk parameters.`;
+      this.logger.error(errorMsg, { event: "position_too_large" });
+      await this.alerting?.sendAlert({
+        level: "CRITICAL",
+        message: errorMsg,
+        botId: this.id
+      });
+      return;
+    }
+
+    // ✅ Log final position size calculation
+    this.logger.info("✅ Position size calculated", {
+      event: "position_size_calc",
+      quantity,
+      marketPrice,
+      positionNotional,
+      balanceUsed: effectiveBalance,
+      notionalPctOfBalance: `${((positionNotional / effectiveBalance) * 100).toFixed(2)}%`,
+      stopLoss: signal.stopLoss,
+      takeProfit: signal.takeProfit
+    });
+
+    // Step 4: Run risk checks.
+    const riskCheck = await this.riskManager.checkEntry({
+      botId: this.id,
+      config: this.config,
+      signal,
+      marketPrice,
+      quantity,
+      currentEquity: balance.total,
+      openPosition: dbPosition
+    });
+
+    if (!riskCheck.allowed) {
+      this.logger.warn(`Entry blocked: ${riskCheck.reason}`, {
+        event: "risk_blocked",
+        botId: this.id
+      });
+      return;
+    }
+
+    // Step 5: Execute entry order.
+    const result = await this.orderExecutor.executeEntry({
+      botId: this.id,
+      symbol: this.config.symbol,
+      signal,
+      quantity,
+      marketPrice
+    });
+    const entryOrder: ExchangeOrder = result.exchangeOrder;
+
+    // Step 6: Notify strategy of fill.
+    this.strategy.onFill(this.toStrategyPosition(result.position));
+
+    // Step 7: Update equity in SQLite.
+    const updatedBalance = await this.exchange.getBalance();
+    await this.stateManager.updateBotEquity(this.id, updatedBalance.total);
+
+    this.logger.info("Position opened", {
+      event: "position_opened",
+      side: signal.side,
+      quantity,
+      price: result.position.entryPrice,
+      stopLoss: signal.stopLoss,
+      takeProfit: signal.takeProfit,
+      orderId: entryOrder.id
+    });
+  }
+
+  /**
+   * Handles exit signals with order placement and DB updates.
+   */
+  private async handleExit(signal: Signal, dbPosition: Position | null): Promise<void> {
+    // Step 1: Ensure there is a position to close.
+    if (dbPosition === null) {
+      this.logger.warn("Exit signal ignored: no open position", {
+        event: "signal_exit_no_position",
+        reason: signal.reason
+      });
+      return;
+    }
+
+    // Step 2: Fetch market price and balance.
+    const marketPrice = signal.price ?? (await this.exchange.getLastPrice());
+    if (!this.isPositiveNumber(marketPrice)) {
+      this.logger.warn("Exit blocked: invalid market price", {
+        event: "exit_invalid_price",
+        price: marketPrice
+      });
+      return;
+    }
+
+    const balance = await this.exchange.getBalance();
+    if (!this.isPositiveNumber(balance.total)) {
+      this.logger.warn("Exit blocked: invalid equity", {
+        event: "exit_invalid_equity",
+        equity: balance.total
+      });
+      return;
+    }
+
+    // Step 3: Execute exit order.
+    const result = await this.orderExecutor.executeExit({
+      botId: this.id,
+      position: dbPosition,
+      marketPrice,
+      reason: signal.reason
+    });
+    const exitOrder: ExchangeOrder = result.exchangeOrder;
+
+    // Step 4: Update equity in SQLite.
+    const updatedBalance = await this.exchange.getBalance();
+    await this.stateManager.updateBotEquity(this.id, updatedBalance.total);
+
+    this.logger.info("Position closed", {
+      event: "position_closed",
+      side: dbPosition.side,
+      quantity: dbPosition.quantity,
+      exitPrice: result.exitPrice,
+      reason: signal.reason,
+      orderId: exitOrder.id
+    });
+  }
+
+  /**
+   * Loads bot state from SQLite and ensures a bot record exists.
+   */
+  private async loadState(): Promise<Bot> {
+    // Step 1: Fetch existing bot when an id was provided.
+    if (this.isNonEmptyString(this.id)) {
+      const existing = await this.stateManager.getBot(this.id);
+      if (existing !== null) {
+        await this.stateManager.updateBotHeartbeat(existing.id);
+        return existing;
+      }
+    }
+
+    // Step 2: Create a new bot record when missing.
+    const newId = await this.stateManager.createBot(this.config);
+    this.id = newId;
+
+    const created = await this.stateManager.getBot(this.id);
+    if (created === null) {
+      throw new Error("Failed to create or load bot state.");
+    }
+
+    await this.stateManager.updateBotHeartbeat(created.id);
+    return created;
+  }
+
+  /**
+   * Reconciles DB positions with the exchange snapshot.
+   */
+  private async reconcilePositions(): Promise<void> {
+    // Step 1: Load current exchange position and market price.
+    const exchangePosition: ExchangePosition | null = await this.exchange.getPosition();
+    const marketPrice = await this.exchange.getLastPrice();
+
+    // Step 2: Perform reconciliation.
+    const result = await this.positionManager.reconcilePosition({
+      botId: this.id,
+      symbol: this.config.symbol,
+      exchangePosition,
+      marketPrice
+    });
+
+    this.logger.info("Position reconciliation complete", {
+      event: "position_reconcile",
+      action: result.action,
+      reason: result.reason
+    });
+  }
+
+  /**
+   * Initializes strategy with historical candles.
+   */
+  private async initializeStrategy(): Promise<void> {
+    // Step 1: Skip when warmup period is zero.
+    const warmup = this.strategy.warmupPeriod;
+    if (!Number.isFinite(warmup) || warmup <= 0) {
+      return;
+    }
+
+    // Step 2: Fetch warmup candles from exchange.
+    const candles = await this.exchange.getLatestCandles({ limit: warmup });
+    const strategyCandles = candles.map((candle) => this.toStrategyCandle(candle));
+
+    // Step 3: Initialize strategy.
+    this.strategy.initialize(strategyCandles);
+
+    this.logger.info("Strategy initialized", {
+      event: "strategy_initialized",
+      warmupCount: strategyCandles.length
+    });
+  }
+
+  /**
+   * Fetches the latest candle from the exchange.
+   */
+  private async fetchLatestCandle(): Promise<ExchangeCandle | null> {
+    // Step 1: Retrieve candles with a limit of 1.
+    const candles = await this.exchange.getLatestCandles({ limit: 1 });
+    if (candles.length === 0) {
+      this.logger.warn("No candles returned from exchange", {
+        event: "candle_empty"
+      });
+      return null;
+    }
+
+    // Step 2: Use the last candle in the response.
+    return candles[candles.length - 1] ?? null;
+  }
+
+  /**
+   * Updates bot heartbeat when interval elapsed.
+   */
+  private async updateHeartbeatIfNeeded(): Promise<void> {
+    const now = Date.now();
+    if (this.lastHeartbeatAt === null || now - this.lastHeartbeatAt >= this.heartbeatIntervalMs) {
+      await this.stateManager.updateBotHeartbeat(this.id);
+      this.lastHeartbeatAt = now;
+    }
+  }
+
+  /**
+   * Waits until the next candle interval.
+   */
+  private async waitForNextCandle(): Promise<void> {
+    const intervalMs =
+      this.candleIntervalMsOverride ?? intervalToMs(this.config.interval);
+    await this.sleep(intervalMs);
+  }
+
+  /**
+   * Handles unexpected errors and optionally sends alerts.
+   */
+  private async handleError(error: unknown): Promise<void> {
+    // Step 1: Track error count.
+    this.errorCount += 1;
+
+    // Step 2: Log the error.
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.error("Bot error", {
+      event: "bot_error",
+      error: message
+    });
+
+    // Step 3: Send alert when configured.
+    if (this.alerting !== undefined) {
+      await this.alerting.sendAlert({
+        level: "CRITICAL",
+        message: `Bot error: ${message}`,
+        botId: this.id
+      });
+    }
+
+    // Step 4: Stop the bot after too many errors.
+    if (this.errorCount > 10) {
+      this.logger.critical("Too many errors, stopping bot", {
+        event: "bot_error_limit",
+        errorCount: this.errorCount
+      });
+      await this.stop();
+    }
+  }
+
+  /**
+   * Converts exchange candles to strategy candles.
+   */
+  private toStrategyCandle(candle: ExchangeCandle): Candle {
+    return {
+      timestamp: candle.timeUtcMs,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume
+    };
+  }
+
+  /**
+   * Converts core DB positions to strategy positions.
+   */
+  private toStrategyPosition(position: Position): StrategyPosition {
+    return {
+      id: position.id,
+      side: position.side === "LONG" ? "long" : "short",
+      entryPrice: position.entryPrice,
+      quantity: position.quantity,
+      stopLoss: position.stopLoss ?? position.entryPrice,
+      takeProfit: position.takeProfit,
+      entryTime: position.entryTime
+    };
+  }
+
+  /**
+   * Calculates order quantity based on signal and risk limits.
+   */
+  private calculateQuantity(signal: Signal, marketPrice: number, equity: number): number {
+    // Step 1: Use signal quantity when provided.
+    if (this.isPositiveNumber(signal.quantity)) {
+      return signal.quantity;
+    }
+
+    // Step 2: Get risk parameters with fallback to defaults
+    const riskParams = this.config.params?.risk;
+    let quantity: number;
+
+    if (riskParams?.sizingMode === "fixed_risk_pct") {
+      // Risk-based position sizing: risk% of equity per trade
+      if (!signal.stopLoss || !this.isPositiveNumber(signal.stopLoss)) {
+        throw new Error("Cannot calculate risk-based position size without stop loss.");
+      }
+
+      const riskAmount = equity * (riskParams.riskPctPerTrade / 100);
+      const riskPerUnit = Math.abs(marketPrice - signal.stopLoss);
+      quantity = riskPerUnit > 0 ? riskAmount / riskPerUnit : 0;
+
+    } else if (riskParams?.sizingMode === "fixed_notional") {
+      // Fixed notional position sizing
+      quantity = riskParams.fixedNotional / marketPrice;
+
+    } else {
+      // Fallback: use max position size percent
+      const maxPositionValue = (equity * this.config.riskManagement.maxPositionSizePct) / 100;
+      quantity = maxPositionValue / marketPrice;
+
+      this.logger.debug("Using fallback position sizing", {
+        event: "position_sizing_fallback",
+        reason: riskParams ? "Unknown sizing mode" : "No risk params configured",
+        maxPositionValue,
+        quantity
+      });
+    }
+
+    if (!this.isPositiveNumber(quantity)) {
+      throw new Error("Calculated quantity is invalid.");
+    }
+
+    // Apply max position size cap
+    const maxPositionValue = (equity * this.config.riskManagement.maxPositionSizePct) / 100;
+    const maxQuantity = maxPositionValue / marketPrice;
+
+    return Math.min(quantity, maxQuantity);
+  }
+
+  /**
+   * Sleep helper with Promise.
+   */
+  private async sleep(durationMs: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, durationMs);
+    });
+  }
+
+  /**
+   * Validates a non-empty string.
+   */
+  private isNonEmptyString(value: unknown): value is string {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
+  /**
+   * Validates positive numbers.
+   */
+  private isPositiveNumber(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
+  }
+}

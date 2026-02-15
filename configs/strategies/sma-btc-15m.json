@@ -1,0 +1,16 @@
+{
+  "name": "SMA Crossover BTC 15m",
+  "strategy": "sma-crossover",
+  "exchange": "paper",
+  "symbol": "BTC-USD",
+  "interval": "15m",
+  "initialBalance": 5000,
+  "riskManagement": {
+    "maxDailyLossPct": 5,
+    "maxPositionSizePct": 100
+  },
+  "params": {
+    "fastPeriod": 10,
+    "slowPeriod": 30
+  }
+}

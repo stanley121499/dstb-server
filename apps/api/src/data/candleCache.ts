@@ -9,14 +9,16 @@
  * Key format: `${source}:${symbol}:${interval}:${startTime}:${endTime}`
  */
 
+import type { CandleFetchResult } from "./yahooFinance.js";
+
 type CacheEntry<T> = {
   value: T;
   timestamp: number;
 };
 
 export class CandleCache<T> {
-  private cache: Map<string, CacheEntry<T>> = new Map();
-  private pendingFetches: Map<string, Promise<T>> = new Map(); // Track in-flight requests
+  private readonly cache: Map<string, CacheEntry<T>> = new Map();
+  private readonly pendingFetches: Map<string, Promise<T>> = new Map(); // Track in-flight requests
   private readonly maxSize: number;
   private readonly ttlMs: number;
 
@@ -74,7 +76,7 @@ export class CandleCache<T> {
     if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
       const firstKey = this.cache.keys().next().value;
       if (firstKey !== undefined) {
-        this.cache.delete(firstKey as string);
+        this.cache.delete(firstKey);
       }
     }
 
@@ -154,7 +156,7 @@ export class CandleCache<T> {
  * Global candle cache instance.
  * Shared across all backtest runs.
  */
-export const candleCache = new CandleCache({
+export const candleCache = new CandleCache<CandleFetchResult>({
   maxSize: 200, // Store up to 200 different symbol/interval/date combinations
   ttlMs: 2 * 60 * 60 * 1000 // 2 hours
 });

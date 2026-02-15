@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { Sha256 } from "../utils/hash.js";
-import { intervalToMs } from "../utils/interval.js";
 import type { Candle, YahooInterval, CandleFetchResult } from "./yahooFinance.js";
 
 /**
@@ -41,6 +40,7 @@ function toBinanceSymbol(symbol: string): string {
   const normalized = symbol.toUpperCase().replace("-", "");
   if (normalized === "BTCUSD") return "BTCUSDT";
   if (normalized === "ETHUSD") return "ETHUSDT";
+  if (normalized === "ZECUSD") return "ZECUSDT";
   // If already in correct format or other pairs
   return normalized.endsWith("USD") ? normalized + "T" : normalized;
 }
@@ -94,7 +94,7 @@ export async function fetchBinanceCandles(args: Readonly<{
   url.searchParams.set("endTime", endMs.toString());
   url.searchParams.set("limit", "1000"); // Max 1000 per request
 
-  console.log(`[Binance] Fetching ${binanceSymbol} ${binanceInterval} from ${args.startTimeUtc} to ${args.endTimeUtc}`);
+  // Suppress verbose logging - caller will log fetch progress
 
   const candles: Candle[] = [];
   let currentStartMs = startMs;
@@ -128,7 +128,7 @@ export async function fetchBinanceCandles(args: Readonly<{
         break;
       }
 
-      console.log(`[Binance] Received ${data.length} candles`);
+      // Suppress verbose per-batch logging (too noisy for large fetches)
 
       for (const kline of data) {
         try {
@@ -180,7 +180,7 @@ export async function fetchBinanceCandles(args: Readonly<{
     }
   }
 
-  console.log(`[Binance] Total candles fetched: ${candles.length}`);
+  // Total candles logged by caller
 
   // Sort candles by time (should already be sorted, but ensure it)
   candles.sort((a, b) => a.timeUtcMs - b.timeUtcMs);

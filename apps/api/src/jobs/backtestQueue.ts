@@ -190,11 +190,18 @@ export class BacktestQueue {
 
   private async processRun(runId: string): Promise<void> {
     try {
-      await processBacktestRun({ 
-        supabase: this.supabase, 
-        runId,
-        resultsWriter: this.resultsWriter
-      });
+      const runnerArgs: {
+        supabase: SupabaseClient;
+        runId: string;
+        resultsWriter?: ResultsFileWriter;
+      } = { supabase: this.supabase, runId };
+
+      // With `exactOptionalPropertyTypes`, we must omit optional props rather than pass `undefined`.
+      if (this.resultsWriter !== undefined) {
+        runnerArgs.resultsWriter = this.resultsWriter;
+      }
+
+      await processBacktestRun(runnerArgs);
       console.log(`[BacktestQueue] Completed run: ${runId.substring(0, 8)}`);
     } catch (err: unknown) {
       // This catch should never trigger - processBacktestRun handles its own errors

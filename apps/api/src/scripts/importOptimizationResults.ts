@@ -76,13 +76,14 @@ async function importResults(filePath: string): Promise<void> {
         if (result.status === "completed") {
           const updateData = {
             status: "completed" as const,
-            final_equity: result.finalEquity,
-            total_return_pct: result.totalReturnPct,
-            max_drawdown_pct: result.maxDrawdownPct,
-            win_rate_pct: result.winRatePct,
-            profit_factor: result.profitFactor,
-            trade_count: result.tradeCount,
-            data_fingerprint: result.dataFingerprint,
+            // With `exactOptionalPropertyTypes`, avoid `undefined` for nullable DB columns.
+            final_equity: result.finalEquity ?? null,
+            total_return_pct: result.totalReturnPct ?? null,
+            max_drawdown_pct: result.maxDrawdownPct ?? null,
+            win_rate_pct: result.winRatePct ?? null,
+            profit_factor: result.profitFactor ?? null,
+            trade_count: result.tradeCount ?? null,
+            data_fingerprint: result.dataFingerprint ?? null,
             error_message: null
           };
           

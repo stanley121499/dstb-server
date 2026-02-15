@@ -160,6 +160,7 @@ export async function processBacktestRun(args: Readonly<{
     const simulation = runBacktest({
       runId: args.runId,
       candles,
+      candlesSorted: true,
       params,
       startTimeUtc,
       endTimeUtc,

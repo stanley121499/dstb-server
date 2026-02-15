@@ -11,7 +11,7 @@ import { z } from "zod";
 export const strategyParamsSchema = z
   .object({
     version: z.literal("1.0"),
-    symbol: z.enum(["BTC-USD", "ETH-USD"]),
+    symbol: z.enum(["BTC-USD", "ETH-USD", "ZEC-USD"]),
     interval: z.enum(["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]),
 
     session: z

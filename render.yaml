@@ -1,0 +1,30 @@
+services:
+  # Live trading bot worker - runs continuously
+  - type: worker
+    name: dstb-bot-worker
+    runtime: node
+    plan: starter  # $7/month - always-on
+    rootDir: .
+    buildCommand: "npm ci && npm run -w apps/api build"
+    # Note: You'll need to create the config in Render's secret files
+    startCommand: "node apps/api/dist/scripts/botCli.js start --config /etc/secrets/bot-config.json"
+    autoDeploy: true
+    
+    # Environment variables (set in Render dashboard)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false  # Set manually in Render
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false  # Set manually in Render
+      - key: BITUNIX_API_KEY
+        sync: false  # Set manually in Render
+      - key: BITUNIX_SECRET_KEY
+        sync: false  # Set manually in Render
+      - key: ENGINE_VERSION
+        value: "1.0.0"
+    
+    # Health check configuration (optional but recommended)
+    # Note: Render workers don't have built-in health checks, but we can use disk for monitoring
+
