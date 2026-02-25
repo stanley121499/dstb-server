@@ -1,0 +1,7 @@
+{
+  "symbol": "BTCUSDT",
+  "longLeverage": 20,
+  "shortLeverage": 20,
+  "marginMode": "ISOLATED",
+  "positionMode": "ONE_WAY"
+}

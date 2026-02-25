@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { YahooInterval } from "../../../apps/api/src/data/yahooFinance.js";
-import { PaperTradingAdapter } from "../../../apps/api/src/exchange/PaperTradingAdapter.js";
+import type { YahooInterval } from "../../data/yahooFinance.js";
+import { PaperTradingAdapter } from "../../exchange/PaperTradingAdapter.js";
 import type { Candle as StrategyCandle, IStrategy, Position as StrategyPosition, Signal } from "../../strategies/IStrategy";
 import { Logger } from "../Logger";
 import { StateManager } from "../StateManager";
@@ -19,7 +19,7 @@ const mockedBinance = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../../apps/api/src/data/binanceDataSource.js", () => {
+vi.mock("../../data/binanceDataSource.js", () => {
   return {
     fetchBinanceCandles: mockedBinance.fetchBinanceCandles
   };

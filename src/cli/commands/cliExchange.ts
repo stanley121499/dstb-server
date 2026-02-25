@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import type { BotConfig } from "../../core/types";
-import { createExchangeAdapter } from "../../../apps/api/src/exchange/createAdapter.js";
-import type { ExchangeAdapterConfig } from "../../../apps/api/src/exchange/createAdapter.js";
-import type { YahooInterval } from "../../../apps/api/src/data/yahooFinance.js";
-import type { IExchangeAdapter } from "../../../apps/api/src/exchange/IExchangeAdapter.js";
+import { createExchangeAdapter } from "../../exchange/createAdapter.js";
+import type { ExchangeAdapterConfig } from "../../exchange/createAdapter.js";
+import type { YahooInterval } from "../../data/yahooFinance.js";
+import type { IExchangeAdapter } from "../../exchange/IExchangeAdapter.js";
 
 const intervalSchema = z.enum(["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]);
 

@@ -1,6 +1,6 @@
-import type { IExchangeAdapter } from "../../apps/api/src/exchange/IExchangeAdapter.js";
-import type { ExchangeCandle, Order as ExchangeOrder, Position as ExchangePosition } from "../../apps/api/src/exchange/types.js";
-import { intervalToMs } from "../../apps/api/src/utils/interval.js";
+import type { IExchangeAdapter } from "../exchange/IExchangeAdapter.js";
+import type { ExchangeCandle, Order as ExchangeOrder, Position as ExchangePosition } from "../exchange/types.js";
+import { intervalToMs } from "../utils/interval.js";
 
 import type { Candle, IStrategy, Position as StrategyPosition, Signal } from "../strategies/IStrategy";
 import { Logger } from "./Logger";
@@ -190,14 +190,17 @@ export class TradingBot {
         }
         this.lastCandleTime = candle.timeUtcMs;
 
-        // Step 3: Load current DB position.
+        // Step 3: Sync DB position with exchange (detects SL/TP fills, prevents stale state).
+        await this.syncPositionWithExchange();
+
+        // Step 4: Load current DB position.
         const dbPosition = await this.positionManager.getOpenPosition(this.id);
         const strategyPosition = dbPosition ? this.toStrategyPosition(dbPosition) : null;
 
-        // Step 4: Ask strategy for a signal.
+        // Step 5: Ask strategy for a signal.
         const signal = this.strategy.onCandle(this.toStrategyCandle(candle), strategyPosition);
 
-        // Step 5: Execute signal actions.
+        // Step 6: Execute signal actions.
         if (signal.type === "ENTRY") {
           await this.handleEntry(signal, dbPosition);
         } else if (signal.type === "EXIT") {
@@ -209,10 +212,10 @@ export class TradingBot {
           });
         }
 
-        // Step 6: Update heartbeat if due.
+        // Step 7: Update heartbeat if due.
         await this.updateHeartbeatIfNeeded();
 
-        // Step 7: Respect interval pacing.
+        // Step 8: Respect interval pacing.
         await this.waitForNextCandle();
 
         iterations += 1;
@@ -227,6 +230,45 @@ export class TradingBot {
   }
 
   /**
+   * Syncs the DB position with the live exchange position every loop iteration.
+   * This detects when SL/TP orders have been filled on the exchange and closes
+   * the corresponding DB position, preventing stale open positions.
+   */
+  private async syncPositionWithExchange(): Promise<void> {
+    const dbPosition = await this.positionManager.getOpenPosition(this.id);
+
+    // Only sync if we think we have an open position in the DB.
+    if (dbPosition === null) {
+      return;
+    }
+
+    // Check what the exchange actually shows.
+    const exchangePosition = await this.exchange.getPosition();
+
+    if (exchangePosition === null) {
+      // Exchange is flat but DB still has an open position.
+      // This means SL/TP was hit on the exchange (or manually closed).
+      const marketPrice = await this.exchange.getLastPrice();
+      const closePrice = this.isPositiveNumber(marketPrice) ? marketPrice : dbPosition.entryPrice;
+
+      await this.stateManager.closePosition(dbPosition.id, closePrice, "exchange_closed_externally");
+
+      this.logger.warn("DB position closed: exchange position no longer exists (SL/TP or manual close)", {
+        event: "position_sync_closed",
+        botId: this.id,
+        positionId: dbPosition.id,
+        closePrice
+      });
+
+      // Update equity after external close.
+      const balance = await this.exchange.getBalance();
+      if (this.isPositiveNumber(balance.total)) {
+        await this.stateManager.updateBotEquity(this.id, balance.total);
+      }
+    }
+  }
+
+  /**
    * Handles entry signals with risk checks and order placement.
    */
   private async handleEntry(signal: Signal, dbPosition: Position | null): Promise<void> {
@@ -235,6 +277,27 @@ export class TradingBot {
       this.logger.warn("Ignored invalid ENTRY signal", {
         event: "signal_entry_invalid",
         reason: signal.reason
+      });
+      return;
+    }
+
+    // Step 1b: Block entry if already in a position (DB or exchange).
+    if (dbPosition !== null) {
+      this.logger.debug("Entry blocked: already in a DB position", {
+        event: "entry_blocked_db_position",
+        positionId: dbPosition.id,
+        side: dbPosition.side
+      });
+      return;
+    }
+
+    // Also check exchange directly to prevent stacking even if DB is stale.
+    const exchangePosition = await this.exchange.getPosition();
+    if (exchangePosition !== null) {
+      this.logger.warn("Entry blocked: exchange already has an open position (DB may be stale)", {
+        event: "entry_blocked_exchange_position",
+        exchangeSide: exchangePosition.side,
+        exchangeQty: exchangePosition.quantity
       });
       return;
     }

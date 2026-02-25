@@ -1,0 +1,12 @@
+{
+  "tpslId": "tpsl001",
+  "symbol": "BTCUSDT",
+  "positionId": "pos001",
+  "side": "SELL",
+  "tpslType": "TAKE_PROFIT",
+  "status": "INIT",
+  "triggerPrice": "35000.00",
+  "qty": "0.1",
+  "createTime": 1678888000000,
+  "updateTime": 1678888001000
+}

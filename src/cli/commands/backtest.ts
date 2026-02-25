@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { strategyParamsSchema } from "../../../apps/api/src/domain/strategyParams.js";
-import { fetchYahooCandles } from "../../../apps/api/src/data/yahooFinance.js";
-import { runBacktest as runBacktestEngine } from "../../../apps/api/src/backtest/runBacktest.js";
+import { strategyParamsSchema } from "../../domain/strategyParams.js";
+import { fetchYahooCandles } from "../../data/yahooFinance.js";
+import { runBacktest as runBacktestEngine } from "../../backtest/runBacktest.js";
 import type { ParsedCliArgs } from "./cliTypes";
 import { assertNonEmptyString, isRecord, readJsonFile } from "./cliUtils";
 

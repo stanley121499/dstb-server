@@ -1,0 +1,12 @@
+{
+  "positionId": "pos001",
+  "symbol": "BTCUSDT",
+  "side": "BUY",
+  "avgOpenPrice": "29500.00",
+  "qty": "0.5",
+  "unrealizedPNL": "250.00",
+  "realizedPNL": "0",
+  "fee": "2.95",
+  "ctime": 1678888000000,
+  "mtime": 1678888100000
+}

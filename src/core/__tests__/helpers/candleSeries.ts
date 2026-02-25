@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Candle, CandleFetchResult, YahooInterval } from "../../../apps/api/src/data/yahooFinance.js";
+import type { Candle, CandleFetchResult, YahooInterval } from "../../data/yahooFinance.js";
 
 /**
  * Args for building deterministic candle series.

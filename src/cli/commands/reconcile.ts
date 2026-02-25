@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Balance, Position as ExchangePosition } from "../../../apps/api/src/exchange/types.js";
+import type { Balance, Position as ExchangePosition } from "../../exchange/types.js";
 import type { Bot, Position } from "../../core/types";
 import type { ParsedCliArgs, ReconcileResult } from "./cliTypes";
 import { buildExchangeAdapter } from "./cliExchange";

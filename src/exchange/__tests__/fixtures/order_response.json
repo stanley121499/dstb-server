@@ -1,0 +1,12 @@
+{
+  "orderId": "ord001",
+  "symbol": "BTCUSDT",
+  "side": "BUY",
+  "status": "NEW",
+  "orderType": "LIMIT",
+  "qty": "0.1",
+  "price": "29000.00",
+  "clientId": "bot-1700000000000-abc-123",
+  "time": 1678888000000,
+  "updateTime": 1678888001000
+}

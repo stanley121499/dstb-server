@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { ExchangeCandle } from "../../apps/api/src/exchange/types.js";
-import { intervalToMs } from "../../apps/api/src/utils/interval.js";
-import { strategyParamsSchema } from "../../apps/api/src/domain/strategyParams.js";
+import type { ExchangeCandle } from "../exchange/types.js";
+import { intervalToMs } from "../utils/interval.js";
+import { strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
 import { StateManager } from "../core/StateManager";

@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { Candle } from "../../apps/api/src/data/yahooFinance.js";
-import { fetchBinanceCandles } from "../../apps/api/src/data/binanceDataSource.js";
-import { runBacktest } from "../../apps/api/src/backtest/runBacktest.js";
-import { strategyParamsSchema } from "../../apps/api/src/domain/strategyParams.js";
+import type { Candle } from "../data/yahooFinance.js";
+import { fetchBinanceCandles } from "../data/binanceDataSource.js";
+import { runBacktest } from "../backtest/runBacktest.js";
+import { strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
 import { StateManager } from "../core/StateManager";

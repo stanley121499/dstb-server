@@ -1,4 +1,4 @@
-import type { Position as ExchangePosition } from "../../apps/api/src/exchange/types.js";
+import type { Position as ExchangePosition } from "../exchange/types.js";
 
 import { Logger } from "./Logger";
 import { StateManager } from "./StateManager";
@@ -209,7 +209,11 @@ export class PositionManager {
         side: exchangeSide,
         quantity: args.exchangePosition.quantity,
         entryPrice: args.exchangePosition.entryPrice,
-        entryTime: this.parseUtcMs(args.exchangePosition.openedAtUtc)
+        entryTime: this.parseUtcMs(args.exchangePosition.openedAtUtc),
+        // Preserve stopLoss and takeProfit from DB - exchange doesn't return these
+        // and the strategy needs them for software-based exit checks.
+        stopLoss: dbPosition.stopLoss,
+        takeProfit: dbPosition.takeProfit
       });
 
       this.logger.warn("Updated DB position to match exchange snapshot", {

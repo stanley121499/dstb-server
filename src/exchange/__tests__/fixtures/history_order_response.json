@@ -1,0 +1,14 @@
+{
+  "orderId": "hord001",
+  "clientId": "c001",
+  "symbol": "BTCUSDT",
+  "side": "BUY",
+  "type": "MARKET",
+  "status": "FILLED",
+  "origQty": "0.1",
+  "executedQty": "0.1",
+  "avgPrice": "30000.00",
+  "fee": "0.003",
+  "time": 1678888000000,
+  "updateTime": 1678888001000
+}

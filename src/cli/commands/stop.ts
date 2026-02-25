@@ -1,4 +1,4 @@
-import type { OrderSide } from "../../../apps/api/src/exchange/types.js";
+import type { OrderSide } from "../../exchange/types.js";
 import type { Position } from "../../core/types";
 import type { ParsedCliArgs } from "./cliTypes";
 import { buildExchangeAdapter } from "./cliExchange";

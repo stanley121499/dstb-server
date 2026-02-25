@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { ExchangeCandle, Order, OrderSide, OrderStatus, RateLimitStatus } from "../../../apps/api/src/exchange/types.js";
-import type { Balance, Position } from "../../../apps/api/src/exchange/types.js";
-import type { IExchangeAdapter } from "../../../apps/api/src/exchange/IExchangeAdapter.js";
-import type { YahooInterval } from "../../../apps/api/src/data/yahooFinance.js";
+import type { ExchangeCandle, Order, OrderSide, OrderStatus, RateLimitStatus } from "../../exchange/types.js";
+import type { Balance, Position } from "../../exchange/types.js";
+import type { IExchangeAdapter } from "../../exchange/IExchangeAdapter.js";
+import type { YahooInterval } from "../../data/yahooFinance.js";
 
 type ReplayAdapterOptions = Readonly<{
   candles: readonly ExchangeCandle[];

@@ -1,0 +1,12 @@
+{
+  "positionId": "hpos001",
+  "symbol": "BTCUSDT",
+  "side": "BUY",
+  "entryPrice": "28000.00",
+  "closePrice": "32000.00",
+  "qty": "0.5",
+  "realizedPnl": "2000.00",
+  "fee": "5.00",
+  "openTime": 1678800000000,
+  "closeTime": 1678888888000
+}

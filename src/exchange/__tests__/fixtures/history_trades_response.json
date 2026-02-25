@@ -1,0 +1,24 @@
+[
+  {
+    "tradeId": "t001",
+    "orderId": "o001",
+    "symbol": "BTCUSDT",
+    "side": "BUY",
+    "qty": "0.1",
+    "price": "30000.00",
+    "fee": "0.0015",
+    "realizedPNL": "0",
+    "ctime": 1678888888000
+  },
+  {
+    "tradeId": "t002",
+    "orderId": "o002",
+    "symbol": "BTCUSDT",
+    "side": "SELL",
+    "qty": "0.05",
+    "price": "30500.00",
+    "fee": "0.00075",
+    "realizedPNL": "25.00",
+    "ctime": 1678889000000
+  }
+]

@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { Candle, CandleFetchResult, YahooInterval } from "../../../apps/api/src/data/yahooFinance.js";
-import { PaperTradingAdapter } from "../../../apps/api/src/exchange/PaperTradingAdapter.js";
+import type { Candle, CandleFetchResult, YahooInterval } from "../../data/yahooFinance.js";
+import { PaperTradingAdapter } from "../../exchange/PaperTradingAdapter.js";
 import { Logger } from "../Logger";
 import { StateManager } from "../StateManager";
 import { TradingBot } from "../TradingBot";
@@ -63,7 +63,7 @@ const mockData = vi.hoisted(() => {
   return { candles, buildFetchResult };
 });
 
-vi.mock("../../../apps/api/src/data/binanceDataSource.js", () => {
+vi.mock("../../data/binanceDataSource.js", () => {
   return {
     fetchBinanceCandles: vi.fn(async () => mockData.buildFetchResult(mockData.candles))
   };

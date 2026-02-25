@@ -1,5 +1,5 @@
-import type { IExchangeAdapter } from "../../apps/api/src/exchange/IExchangeAdapter.js";
-import type { Order as ExchangeOrder, OrderSide } from "../../apps/api/src/exchange/types.js";
+import type { IExchangeAdapter } from "../exchange/IExchangeAdapter.js";
+import type { Order as ExchangeOrder, OrderSide } from "../exchange/types.js";
 
 import { Logger } from "./Logger";
 import { StateManager } from "./StateManager";

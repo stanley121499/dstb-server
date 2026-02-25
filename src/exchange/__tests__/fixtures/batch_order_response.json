@@ -1,0 +1,9 @@
+{
+  "successList": [
+    { "orderId": "ord001", "clientId": "bot-1700000000000-abc-123" },
+    { "orderId": "ord002", "clientId": "bot-1700000000001-def-456" }
+  ],
+  "failureList": [
+    { "clientId": "bot-1700000000002-ghi-789", "errorMsg": "Insufficient balance", "errorCode": 20003 }
+  ]
+}
