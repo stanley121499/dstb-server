@@ -2,7 +2,7 @@
  * Supported bar intervals for Phase 1.
  *
  * Docs note:
- * - `docs/13-data-yfinance-and-intervals.md` lists effective intervals.
+ * - `dstb-docs/raw/docs/architecture.md` describes data flow; effective intervals are defined in this module and call sites.
  * - We keep this aligned with the shared/UI schemas for Phase 1.
  */
 export type BarInterval =

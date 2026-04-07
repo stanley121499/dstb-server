@@ -127,10 +127,12 @@ export type BotConfig = z.infer<typeof botConfigSchema>;
 export type StrategyConfig = z.infer<typeof strategyConfigSchema>;
 
 /**
- * Bot row stored in SQLite.
+ * Bot row persisted in Supabase (`bots` + `configs`).
  */
 export type Bot = {
   id: string;
+  /** `configs.id` — control plane and config versioning. */
+  configId: string;
   name: string;
   strategy: string;
   initialBalance: number;
@@ -140,6 +142,16 @@ export type Bot = {
   createdAt: number;
   lastHeartbeat?: number;
 };
+
+/**
+ * Optional OHLCV bundles written to `trade_candles` when a position closes.
+ */
+export type TradeCandleBundle = Readonly<{
+  timeframe: string;
+  candles: ReadonlyArray<Record<string, unknown>>;
+  rangeStartMs: number;
+  rangeEndMs: number;
+}>;
 
 /**
  * Position row stored in SQLite.

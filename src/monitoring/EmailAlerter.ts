@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { z } from "zod";
 
 import { Logger } from "../core/Logger";
-import { StateManager } from "../core/StateManager";
+import type { BotStateStore } from "../core/BotStateStore.js";
 import { Bot, Position, Trade } from "../core/types";
 
 /**
@@ -44,7 +44,7 @@ export type EmailAlerterConfig = Readonly<{
  */
 export type EmailAlerterOptions = Readonly<{
   config: EmailAlerterConfig;
-  stateManager: StateManager;
+  stateManager: BotStateStore;
   logger?: Logger;
   transporter?: EmailTransporter;
   scheduler?: Readonly<{
@@ -107,7 +107,7 @@ class EmailRateLimiter {
  */
 export class EmailAlerter {
   private readonly config: EmailAlerterConfig;
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
   private readonly transporter: EmailTransporter;
   private readonly scheduler: Readonly<{
@@ -165,7 +165,7 @@ export class EmailAlerter {
   /**
    * Create an EmailAlerter instance from environment variables.
    */
-  public static fromEnv(args: Readonly<{ stateManager: StateManager; logger?: Logger; transporter?: EmailTransporter }>): EmailAlerter {
+  public static fromEnv(args: Readonly<{ stateManager: BotStateStore; logger?: Logger; transporter?: EmailTransporter }>): EmailAlerter {
     const config = emailConfigSchema.parse({
       smtpHost: process.env.SMTP_HOST,
       smtpPort: Number(process.env.SMTP_PORT ?? "587"),
@@ -183,8 +183,8 @@ export class EmailAlerter {
     return new EmailAlerter({
       config,
       stateManager: args.stateManager,
-      logger: args.logger,
-      transporter: args.transporter
+      ...(args.logger !== undefined ? { logger: args.logger } : {}),
+      ...(args.transporter !== undefined ? { transporter: args.transporter } : {})
     });
   }
 

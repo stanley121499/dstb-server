@@ -1,42 +1,29 @@
 # Core Infrastructure Module
 
-This module provides SQLite state management, structured logging, and config loading for the DSTB bot.
+This module provides **Supabase-backed** persistence (`SupabaseStateStore`), an **in-memory** store for tests/offline scripts (`InMemoryBotStateStore`), structured logging, and config loading.
 
 ## Components
 
-- `StateManager`: SQLite-backed persistence for bots, positions, trades, and orders.
-- `Logger`: Daily log files with JSON context and retention.
+- `BotStateStore`: interface implemented by `SupabaseStateStore` and `InMemoryBotStateStore`.
+- `SupabaseStateStore`: Postgres persistence via `@supabase/supabase-js` (service role).
+- `InMemoryBotStateStore`: in-memory implementation for unit tests and replay scripts.
+- `Logger`: daily log files with JSON context and retention.
 - `ConfigLoader`: JSON config loading with env substitution and Zod validation.
 
-## Usage
+## Usage (production / CLI)
+
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, then:
 
 ```typescript
-import path from "node:path";
+import { Logger } from "./Logger.js";
+import { SupabaseStateStore } from "./SupabaseStateStore.js";
 
-import { ConfigLoader } from "./ConfigLoader";
-import { Logger } from "./Logger";
-import { StateManager } from "./StateManager";
-
-const logDir = path.join(process.cwd(), "logs");
-const logger = new Logger("bot-example", logDir);
-
-const config = ConfigLoader.loadBotConfig("configs/bot.example.json");
-
-const dbPath = path.join(process.cwd(), "data", "bot-state.db");
-const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-
-const state = new StateManager({
-  dbPath,
-  schemaPath,
-  logger
-});
-
-await state.createBot(config);
+const logger = new Logger("bot-example", "logs");
+const store = SupabaseStateStore.fromEnv(logger);
+await store.createBot(config);
 ```
 
 ## Testing
-
-Run the core tests from the repository root:
 
 ```bash
 npm run test:core

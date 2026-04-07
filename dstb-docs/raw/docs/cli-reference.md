@@ -140,7 +140,7 @@ bot backtest --config <path> [options]
 bot backtest --config configs/bot.example.json \
   --start 2024-01-01 \
   --end 2024-12-31 \
-  --output docs/reports/backtest-2024.json
+  --output dstb-docs/raw/docs/reports/backtest-2024.json
 ```
 
 **Output:**

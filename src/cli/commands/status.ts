@@ -64,6 +64,9 @@ function formatBotDetail(bot: Bot, positions: readonly Position[], dailyPnl: num
 
   // Step 3: Include the first open position details.
   const position = positions[0];
+  if (position === undefined) {
+    return lines.join("\n");
+  }
   const positionLines = [
     "",
     "Position:",

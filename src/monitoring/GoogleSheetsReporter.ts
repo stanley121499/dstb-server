@@ -1,10 +1,11 @@
 import fs from "node:fs";
+import * as path from "node:path";
 
 import { google } from "googleapis";
 import { z } from "zod";
 
 import { Logger } from "../core/Logger";
-import { StateManager } from "../core/StateManager";
+import type { BotStateStore } from "../core/BotStateStore.js";
 import { Bot, Position, Trade } from "../core/types";
 
 /**
@@ -27,10 +28,12 @@ export type UpdateRequest = { spreadsheetId: string; range: string; valueInputOp
 
 export type SheetsClient = {
   spreadsheets: {
-    get: (args: { spreadsheetId: string }) => Promise<GetResponse>;
-    batchUpdate: (args: BatchUpdateRequest) => Promise<unknown>;
+    get: (params: any, options?: any) => Promise<GetResponse>;
+    batchUpdate: (params: any, options?: any) => Promise<unknown>;
     values: {
-      update: (args: UpdateRequest) => Promise<unknown>;
+      update: (params: any, options?: any) => Promise<unknown>;
+      clear: (params: any, options?: any) => Promise<unknown>;
+      append: (params: any, options?: any) => Promise<unknown>;
     };
   };
 };
@@ -52,10 +55,11 @@ export type GoogleSheetsReporterConfig = Readonly<{
  */
 export type GoogleSheetsReporterOptions = Readonly<{
   config: GoogleSheetsReporterConfig;
-  stateManager: StateManager;
+  stateManager: BotStateStore;
   logger?: Logger;
   scheduler?: IntervalScheduler;
   sheetsClient?: SheetsClient;
+  logDir?: string;
 }>;
 
 const sheetsConfigSchema = z
@@ -69,7 +73,7 @@ const sheetsConfigSchema = z
   })
   .strict();
 
-const SHEET_TABS = ["Live Status", "Trade History", "Daily Summary"] as const;
+const SHEET_TABS = ["Live Status", "Trade History", "Daily Summary", "Server Log", "Bot Logs"] as const;
 type SheetTab = (typeof SHEET_TABS)[number];
 
 /**
@@ -77,11 +81,13 @@ type SheetTab = (typeof SHEET_TABS)[number];
  */
 export class GoogleSheetsReporter {
   private readonly config: GoogleSheetsReporterConfig;
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
   private readonly scheduler: IntervalScheduler;
   private readonly sheetsClient: SheetsClient;
+  private readonly logDir: string;
   private updateTimer: NodeJS.Timeout | null = null;
+  private readonly logOffsets = new Map<string, number>();
 
   /**
    * Create a new Google Sheets reporter.
@@ -118,19 +124,21 @@ export class GoogleSheetsReporter {
     // Step 4: Initialize Google Sheets client.
     this.sheetsClient =
       options.sheetsClient ??
-      google.sheets({
+      (google.sheets({
         version: "v4",
         auth: new google.auth.GoogleAuth({
           keyFile: this.config.serviceAccountKeyPath,
           scopes: ["https://www.googleapis.com/auth/spreadsheets"]
         })
-      });
+      }) as unknown as SheetsClient);
+
+    this.logDir = options.logDir ?? "logs";
   }
 
   /**
    * Create a reporter from environment variables.
    */
-  public static fromEnv(args: Readonly<{ stateManager: StateManager; logger?: Logger; scheduler?: IntervalScheduler }>): GoogleSheetsReporter {
+  public static fromEnv(args: Readonly<{ stateManager: BotStateStore; logger?: Logger; scheduler?: IntervalScheduler; logDir?: string }>): GoogleSheetsReporter {
     const config = sheetsConfigSchema.parse({
       sheetId: process.env.GOOGLE_SHEETS_ID,
       serviceAccountKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
@@ -143,8 +151,9 @@ export class GoogleSheetsReporter {
     return new GoogleSheetsReporter({
       config,
       stateManager: args.stateManager,
-      logger: args.logger,
-      scheduler: args.scheduler
+      ...(args.logger !== undefined ? { logger: args.logger } : {}),
+      ...(args.scheduler !== undefined ? { scheduler: args.scheduler } : {}),
+      ...(args.logDir !== undefined ? { logDir: args.logDir } : {})
     });
   }
 
@@ -189,6 +198,8 @@ export class GoogleSheetsReporter {
       await this.updateLiveStatus();
       await this.updateTradeHistory();
       await this.updateDailySummary();
+      await this.updateServerLog();
+      await this.updateBotLogs();
     } catch (error) {
       this.logger.error("Google Sheets update failed", {
         event: "sheets_update_error",
@@ -227,12 +238,14 @@ export class GoogleSheetsReporter {
    * Update the Live Status tab with current bot snapshot data.
    */
   private async updateLiveStatus(): Promise<void> {
-    const bots = await this.stateManager.getAllBots();
+    const allBots = await this.stateManager.getAllBots();
+    // Filter out bots that haven't heartbeated in 10 minutes (likely crashed/stale)
+    const activeBots = allBots.filter(b => b.lastHeartbeat && Date.now() - b.lastHeartbeat < 600000);
     const positions = await this.stateManager.getAllOpenPositions();
 
     const today = this.formatDate(new Date());
     const rows = await Promise.all(
-      bots.map(async (bot) => {
+      activeBots.map(async (bot) => {
         const botPositions = positions.filter((position) => position.botId === bot.id);
         const positionText = this.formatPositions(botPositions);
         const dailyPnl = await this.stateManager.getDailyPnL(bot.id, today);
@@ -254,6 +267,7 @@ export class GoogleSheetsReporter {
       ...rows
     ];
 
+    await this.clearValues("Live Status", "A2:H"); // clear old rows
     await this.writeValues("Live Status", "A1:H", values);
   }
 
@@ -284,6 +298,7 @@ export class GoogleSheetsReporter {
       ...rows
     ];
 
+    await this.clearValues("Trade History", "A2:G"); // clear old rows
     await this.writeValues("Trade History", "A1:G", values);
   }
 
@@ -318,7 +333,18 @@ export class GoogleSheetsReporter {
       ...rows
     ];
 
+    await this.clearValues("Daily Summary", "A2:E"); // clear old rows
     await this.writeValues("Daily Summary", "A1:E", values);
+  }
+
+  /**
+   * Clear values in a target sheet range to prevent stale data.
+   */
+  private async clearValues(tab: SheetTab, range: string): Promise<void> {
+    await this.sheetsClient.spreadsheets.values.clear({
+      spreadsheetId: this.config.sheetId,
+      range: `${tab}!${range}`
+    });
   }
 
   /**
@@ -331,6 +357,120 @@ export class GoogleSheetsReporter {
       valueInputOption: "RAW",
       requestBody: { values }
     });
+  }
+
+  /**
+   * Append values to a target sheet.
+   */
+  private async appendValues(tab: SheetTab, range: string, values: string[][]): Promise<void> {
+    await this.sheetsClient.spreadsheets.values.append({
+      spreadsheetId: this.config.sheetId,
+      range: `${tab}!${range}`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values }
+    });
+  }
+
+  /**
+   * Reads new lines from a log file incrementally by tracking offsets.
+   */
+  private readNewLogLines(filePath: string): string[][] {
+    try {
+      const stat = fs.statSync(filePath);
+      const currentOffset = this.logOffsets.get(filePath) ?? 0;
+
+      if (stat.size <= currentOffset) {
+        return []; // No new data
+      }
+
+      // If seeing a large file for the first time, cap the initial read to avoid fetching massive backlog.
+      let readStart = currentOffset;
+      if (currentOffset === 0 && stat.size > 50000) {
+        readStart = stat.size - 50000;
+      }
+
+      const fd = fs.openSync(filePath, "r");
+      const bytesToRead = stat.size - readStart;
+      const buf = Buffer.alloc(bytesToRead);
+      fs.readSync(fd, buf, 0, bytesToRead, readStart);
+      fs.closeSync(fd);
+
+      // Update the offset to what we just read
+      this.logOffsets.set(filePath, stat.size);
+
+      const content = buf.toString("utf8");
+      const lines = content.split("\n");
+
+      // If we jumped into the middle of a file, the first split might be half a line.
+      if (readStart > 0 && lines.length > 0) {
+        lines.shift();
+      }
+
+      const validLines = lines.filter((l) => l.trim().length > 0);
+      return validLines.map((line) => {
+        // [2026-02-25 20:27:00] INFO [server] Message...
+        const match = line.match(/^\[(.*?)\]\s+(\w+)\s+\[(.*?)\]\s+(.*)/);
+        if (match) {
+          const timestamp = match[1] ?? "";
+          const level = match[2] ?? "";
+          const botId = match[3] ?? "";
+          const msg = match[4]?.split(" | ")[0] ?? "";
+          return [timestamp, level, botId, msg];
+        }
+        return ["", "", "", line];
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Find the most recent log file matching a prefix.
+   */
+  private findLogFile(prefix: string): string | null {
+    if (!fs.existsSync(this.logDir)) return null;
+    const files = fs.readdirSync(this.logDir).filter((f) => f.endsWith(".log") && f.startsWith(prefix));
+    const match = files.sort().reverse()[0];
+    return match !== undefined ? path.join(this.logDir, match) : null;
+  }
+
+  /**
+   * Update Server Log tab incrementally.
+   */
+  private async updateServerLog(): Promise<void> {
+    const file = this.findLogFile("bot-server-");
+    if (!file) return;
+
+    const parsedLines = this.readNewLogLines(file);
+    if (parsedLines.length === 0) return;
+
+    const rows = parsedLines.map(r => [r[0] ?? "", r[1] ?? "", r[3] ?? ""]);
+    await this.appendValues("Server Log", "A1:C", rows);
+  }
+
+  /**
+   * Update Bot Logs tab incrementally.
+   */
+  private async updateBotLogs(): Promise<void> {
+    const allBots = await this.stateManager.getAllBots();
+    const activeBots = allBots.filter(b => b.lastHeartbeat && Date.now() - b.lastHeartbeat < 600000);
+
+    let allRows: string[][] = [];
+    for (const bot of activeBots) {
+      const file = this.findLogFile(`bot-${bot.id}`);
+      if (file) {
+        const parsedLines = this.readNewLogLines(file);
+        const rows = parsedLines.map(r => [r[0] ?? "", bot.id.slice(0, 8), r[1] ?? "", r[3] ?? ""]);
+        allRows = allRows.concat(rows);
+      }
+    }
+
+    if (allRows.length === 0) return;
+
+    // Sort combined chronological (ascending) so they append naturally.
+    allRows.sort((a, b) => (a[0] ?? "").localeCompare(b[0] ?? ""));
+    await this.appendValues("Bot Logs", "A1:D", allRows);
   }
 
   /**

@@ -4,13 +4,15 @@
 
 Your example bot config is located at: `configs/bot.example.json`
 
+**Phase 1 (v3):** the CLI persists state to **Supabase**. Copy `.env.example` to `.env` and set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` before running `npm run bot` or `npm run start`.
+
 ### Option 1: Foreground Mode (Watch logs in real-time)
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Make sure your API keys are in the .env file
+# 2. Environment: API keys, Bitunix secrets, and Supabase (see .env.example)
 copy .env.example .env
 
 # 3. Choose paper trading vs live trading
@@ -105,11 +107,12 @@ BITUNIX_SECRET_KEY=your-secret-key
 
 ## 📖 Full Documentation
 
-- **Architecture**: [`docs/architecture.md`](./docs/architecture.md)
-- **CLI Reference**: [`docs/cli-reference.md`](./docs/cli-reference.md)
-- **Strategy Guide**: [`docs/strategy-plugin-guide.md`](./docs/strategy-plugin-guide.md)
-- **Deployment**: [`docs/deployment-guide.md`](./docs/deployment-guide.md)
-- **Monitoring**: [`docs/monitoring-setup.md`](./docs/monitoring-setup.md)
+- **Wiki catalog**: [`dstb-docs/index.md`](./dstb-docs/index.md)
+- **Architecture**: [`dstb-docs/raw/docs/architecture.md`](./dstb-docs/raw/docs/architecture.md)
+- **CLI Reference**: [`dstb-docs/raw/docs/cli-reference.md`](./dstb-docs/raw/docs/cli-reference.md)
+- **Strategy Guide**: [`dstb-docs/raw/docs/strategy-plugin-guide.md`](./dstb-docs/raw/docs/strategy-plugin-guide.md)
+- **Deployment**: [`dstb-docs/raw/docs/deployment-guide.md`](./dstb-docs/raw/docs/deployment-guide.md)
+- **Monitoring**: [`dstb-docs/raw/docs/monitoring-setup.md`](./dstb-docs/raw/docs/monitoring-setup.md)
 
 ---
 

@@ -27,6 +27,7 @@ export type BitunixAdapterConfig = Readonly<{
   interval: YahooInterval;
   apiKey?: string;
   apiSecret?: string;
+  testMode?: boolean;
   marketType?: "spot" | "futures";
 }>;
 

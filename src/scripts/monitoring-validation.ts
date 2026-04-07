@@ -198,7 +198,7 @@ function printSummary(results: ValidationResult[]): void {
     console.log("You're ready to proceed with bot deployment.\n");
   } else {
     console.log("\n⚠️  Some monitoring systems need configuration.");
-    console.log("See docs/monitoring-credentials-setup.md for setup instructions.\n");
+    console.log("See dstb-docs/raw/docs/monitoring-credentials-setup.md for setup instructions.\n");
   }
 }
 
@@ -211,7 +211,7 @@ async function main(): Promise<void> {
   console.log("2. Google Sheets");
   console.log("3. Email (SMTP)");
   console.log("\nMake sure you've set up all credentials in .env file.");
-  console.log("See docs/monitoring-credentials-setup.md for instructions.\n");
+  console.log("See dstb-docs/raw/docs/monitoring-credentials-setup.md for instructions.\n");
   
   const results: ValidationResult[] = [];
   

@@ -1,8 +1,8 @@
 {
   "name": "ORB BTC Example",
   "strategy": "orb-atr",
-  "exchange": "bitunix",
-  "symbol": "BTCUSDT",
+  "exchange": "paper",
+  "symbol": "BTC-USD",
   "interval": "15m",
   "initialBalance": 5000,
   "riskManagement": {
@@ -10,17 +10,44 @@
     "maxPositionSizePct": 20
   },
   "params": {
-    "session": "NY",
-    "atrLength": 14,
-    "openingRangeMinutes": 30,
+    "version": "1.0",
+    "intervalMinutes": 15,
+    "session": {
+      "timezone": "America/New_York",
+      "startTime": "09:30",
+      "openingRangeMinutes": 30
+    },
     "entry": {
-      "directionMode": "long_only"
+      "directionMode": "long_only",
+      "entryMode": "stop_breakout",
+      "breakoutBufferBps": 0,
+      "maxTradesPerSession": 1
+    },
+    "atr": {
+      "atrLength": 14,
+      "atrFilter": {
+        "enabled": false,
+        "minAtrBps": 0,
+        "maxAtrBps": 1000
+      }
+    },
+    "risk": {
+      "sizingMode": "fixed_risk_pct",
+      "riskPctPerTrade": 0.5,
+      "fixedNotional": 0,
+      "stopMode": "atr_multiple",
+      "atrStopMultiple": 1.5,
+      "takeProfitMode": "r_multiple",
+      "tpRMultiple": 2,
+      "trailingStopMode": "disabled",
+      "atrTrailMultiple": 1.5,
+      "timeExitMode": "disabled",
+      "barsAfterEntry": 0,
+      "sessionEndTime": "16:00"
+    },
+    "execution": {
+      "feeBps": 10,
+      "slippageBps": 10
     }
-  },
-  "bitunix": {
-    "apiKey": "${BITUNIX_API_KEY}",
-    "secretKey": "${BITUNIX_SECRET_KEY}",
-    "testMode": true,
-    "marketType": "futures"
   }
 }

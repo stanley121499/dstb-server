@@ -5,6 +5,8 @@ import path from "node:path";
 import { ConfigLoader } from "../../core/ConfigLoader";
 import { TradingBot } from "../../core/TradingBot";
 import type { BotConfig } from "../../core/types";
+import { GoogleSheetsReporter } from "../../monitoring/GoogleSheetsReporter";
+import { TelegramAlerter } from "../../monitoring/TelegramAlerter";
 import { createStrategy } from "../../strategies/factory";
 import type { ParsedCliArgs } from "./cliTypes";
 import { buildExchangeAdapter } from "./cliExchange";
@@ -12,7 +14,9 @@ import {
   createBotLogger,
   createStateManager,
   ensureDirectory,
+  isProcessAlive,
   isRecord,
+  listDaemonRecords,
   readJsonFile,
   removeDaemonRecord,
   resolveBotPaths,
@@ -44,7 +48,35 @@ export async function runStart(args: ParsedCliArgs): Promise<void> {
   // Step 3: Load and validate config before branching.
   const config = loadBotConfig(configPath, overrides);
 
-  // Step 4: Spawn daemon or run in foreground.
+  // Step 4: Single-instance guard — skip when re-entering as daemon child.
+  if (!isDaemonChild) {
+    const absConfigPath = path.resolve(process.cwd(), configPath);
+    const existing = listDaemonRecords();
+    for (const record of existing) {
+      if (record.configPath !== absConfigPath) {
+        continue;
+      }
+      if (isProcessAlive(record.pid)) {
+        console.error(
+          [
+            `\n⚠️  Bot already running for this config.`,
+            `   Config:  ${absConfigPath}`,
+            `   Bot ID:  ${record.botId}`,
+            `   PID:     ${record.pid}`,
+            `   Started: ${record.startedAt}`,
+            ``,
+            `   Use "npm run bot -- stop ${record.botId}" to stop it first.`,
+            `   Or "npm run bot -- status" to inspect running bots.`
+          ].join("\n")
+        );
+        process.exit(1);
+      }
+      // Stale record (process dead) — clean it up silently.
+      removeDaemonRecord(record.botId);
+    }
+  }
+
+  // Step 5: Spawn daemon or run in foreground.
   if (daemonRequested && !isDaemonChild) {
     await startDaemon(configPath, config, paperOverride, dryRun);
     return;
@@ -53,7 +85,7 @@ export async function runStart(args: ParsedCliArgs): Promise<void> {
   await startInForeground({
     config,
     configPath,
-    botIdOverride,
+    ...(botIdOverride !== undefined ? { botIdOverride } : {}),
     isDaemonChild
   });
 }
@@ -160,16 +192,37 @@ async function startInForeground(args: Readonly<{
   const strategy = createStrategy(args.config.strategy, args.config.params);
   const exchange = buildExchangeAdapter(args.config);
 
+  // Step 3: Build optional monitoring services from env vars.
+  let telegram: TelegramAlerter | null = null;
+  let sheets: GoogleSheetsReporter | null = null;
+
+  try {
+    telegram = TelegramAlerter.fromEnv({ stateManager, logger });
+    logger.info("Telegram alerter initialised", { event: "telegram_init" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Telegram alerts disabled: ${msg}`, { event: "telegram_skip" });
+  }
+
+  try {
+    sheets = GoogleSheetsReporter.fromEnv({ stateManager, logger });
+    logger.info("Google Sheets reporter initialised", { event: "sheets_init" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Google Sheets reporting disabled: ${msg}`, { event: "sheets_skip" });
+  }
+
   const bot = new TradingBot({
     botId,
     config: args.config,
     strategy,
     exchange,
     stateManager,
-    logger
+    logger,
+    ...(telegram !== null ? { alerting: telegram } : {})
   });
 
-  // Step 3: Register signal handlers for graceful shutdown.
+  // Step 4: Register signal handlers for graceful shutdown.
   const handleSignal = async (signal: string): Promise<void> => {
     logger.info("Shutdown signal received", { event: "bot_shutdown", signal });
     await bot.stop();
@@ -183,28 +236,44 @@ async function startInForeground(args: Readonly<{
   });
 
   try {
-    // Step 4: Mark running, write daemon record if needed, then start.
-    await stateManager.updateBotStatus(botId, "running");
-    if (args.isDaemonChild) {
-      writeDaemonRecord({
-        botId,
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-        configPath: path.resolve(process.cwd(), args.configPath)
+    // Step 5: Start monitoring before the bot loop.
+    telegram?.startPolling();
+    sheets?.start();
+
+    // Send startup notification to Telegram group.
+    if (telegram !== null) {
+      await telegram.sendAlert({
+        level: "INFO",
+        message: [
+          `🚀 <b>Bot started:</b> ${args.config.name}`,
+          `📊 Strategy: <code>${args.config.strategy}</code>`,
+          `💱 Symbol: <code>${args.config.symbol}</code>`,
+          `🏦 Exchange: <code>${args.config.exchange}</code>`
+        ].join("\n"),
+        botId
       });
     }
 
+    // Step 6: Mark running, write daemon record, then start.
+    await stateManager.updateBotStatus(botId, "running");
+    writeDaemonRecord({
+      botId,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      configPath: path.resolve(process.cwd(), args.configPath)
+    });
+
     await bot.start();
   } catch (error) {
-    // Step 5: Flag errors in bot status for visibility.
+    // Step 7: Flag errors in bot status for visibility.
     await stateManager.updateBotStatus(botId, "error");
     throw error;
   } finally {
-    // Step 6: Always mark stopped and clean up daemon registry.
+    // Step 8: Stop monitoring and clean up.
+    telegram?.stopPolling();
+    sheets?.stop();
     await stateManager.updateBotStatus(botId, "stopped");
-    if (args.isDaemonChild) {
-      removeDaemonRecord(botId);
-    }
+    removeDaemonRecord(botId);
   }
 }
 

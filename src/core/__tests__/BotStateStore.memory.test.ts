@@ -1,12 +1,7 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
-import { Logger } from "../Logger";
-import { StateManager } from "../StateManager";
-import { BotConfig, OrderStatus, Position } from "../types";
+import type { BotConfig, OrderStatus, Position } from "../types.js";
+import { InMemoryBotStateStore } from "../InMemoryBotStateStore.js";
 
 /**
  * Format date as YYYY-MM-DD for PnL queries.
@@ -38,27 +33,16 @@ const buildConfig = (): BotConfig => {
   };
 };
 
-describe("StateManager", () => {
+describe("InMemoryBotStateStore", () => {
   it("creates, updates, and closes positions with trades", async () => {
-    // Create temporary directories for the database and logs.
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-state-"));
-    const logDir = path.join(tempDir, "logs");
-    fs.mkdirSync(logDir, { recursive: true });
+    const state = new InMemoryBotStateStore();
 
-    // Initialize logger and state manager.
-    const logger = new Logger("bot-test", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
-
-    // Insert a bot record.
     const botId = await state.createBot(buildConfig());
     const bot = await state.getBot(botId);
 
     expect(bot).not.toBeNull();
     expect(bot?.id).toBe(botId);
 
-    // Create a position for the bot.
     const position: Position = {
       id: "unused",
       botId,
@@ -77,13 +61,11 @@ describe("StateManager", () => {
     expect(openPositions.length).toBe(1);
     expect(openPositions[0]?.id).toBe(positionId);
 
-    // Update the position stop loss.
     await state.updatePosition(positionId, { stopLoss: 39500 });
     const updatedPositions = await state.getOpenPositions(botId);
 
     expect(updatedPositions[0]?.stopLoss).toBe(39500);
 
-    // Close the position and verify trade record creation.
     await state.closePosition(positionId, 41000, "take_profit");
     const remaining = await state.getOpenPositions(botId);
     const trades = await state.getTrades(botId);
@@ -91,28 +73,16 @@ describe("StateManager", () => {
     expect(remaining.length).toBe(0);
     expect(trades.length).toBe(1);
 
-    // Verify daily PnL calculation.
     const date = formatDate(new Date());
     const dailyPnl = await state.getDailyPnL(botId, date);
     expect(dailyPnl).toBeGreaterThan(0);
   });
 
   it("creates and updates orders", async () => {
-    // Create temporary directories for the database and logs.
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-state-"));
-    const logDir = path.join(tempDir, "logs");
-    fs.mkdirSync(logDir, { recursive: true });
+    const state = new InMemoryBotStateStore();
 
-    // Initialize logger and state manager.
-    const logger = new Logger("bot-test", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
-
-    // Insert a bot record.
     const botId = await state.createBot(buildConfig());
 
-    // Create an order record.
     const orderId = await state.createOrder({
       id: "unused",
       botId,
@@ -123,36 +93,19 @@ describe("StateManager", () => {
       quantity: 0.1,
       price: 40000,
       status: "NEW",
-      createdAt: Date.now(),
-      filledAt: undefined
+      createdAt: Date.now()
     });
 
     expect(orderId.length).toBeGreaterThan(0);
 
-    // Update order status and verify retrieval.
     await state.updateOrderStatus("client-1", "FILLED");
     const order = await state.getOrder("client-1");
 
     expect(order?.status).toBe<OrderStatus>("FILLED");
   });
 
-  it("backs up the database", async () => {
-    // Create temporary directories for the database and logs.
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-state-"));
-    const logDir = path.join(tempDir, "logs");
-    fs.mkdirSync(logDir, { recursive: true });
-
-    // Initialize logger and state manager.
-    const logger = new Logger("bot-test", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
-
-    // Perform a backup and check that the backup file exists.
+  it("backup is a no-op", async () => {
+    const state = new InMemoryBotStateStore();
     await state.backup();
-    const backupDir = path.join(tempDir, "backups");
-    const backups = fs.readdirSync(backupDir);
-
-    expect(backups.length).toBeGreaterThan(0);
   });
 });

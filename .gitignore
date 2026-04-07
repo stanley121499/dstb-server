@@ -40,6 +40,9 @@ optimization-results/
 **/bot-live*.json
 **/bot-config.json
 
+# Google Service Account key (NEVER commit this!)
+google-service-account.json
+
 
 
 

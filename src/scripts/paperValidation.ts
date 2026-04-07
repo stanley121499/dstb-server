@@ -7,7 +7,7 @@ import { runBacktest } from "../backtest/runBacktest.js";
 import { strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
-import { StateManager } from "../core/StateManager";
+import { InMemoryBotStateStore } from "../core/InMemoryBotStateStore.js";
 import { TradingBot } from "../core/TradingBot";
 import { createStrategy } from "../strategies/factory";
 import type { BotConfig } from "../core/types";
@@ -60,7 +60,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     configPath: "configs/strategies/orb-btc-15m.json",
     hours: 48,
     variancePct: 5,
-    outputDir: "docs/reports"
+    outputDir: "dstb-docs/raw/docs/reports"
   };
 
   // Step 2: Collect flag values.
@@ -160,9 +160,7 @@ async function runPaperReplay(
   const logDir = path.join(tempDir, "logs");
   fs.mkdirSync(logDir, { recursive: true });
   const logger = new Logger("paper-validation", logDir);
-  const dbPath = path.join(tempDir, "bot-state.db");
-  const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-  const state = new StateManager({ dbPath, schemaPath, logger });
+  const state = new InMemoryBotStateStore();
 
   // Step 2: Build exchange adapter and bot dependencies.
   const strategy = createStrategy(config.strategy, config.params);

@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Candle, CandleFetchResult, YahooInterval } from "../../data/yahooFinance.js";
 import { PaperTradingAdapter } from "../../exchange/PaperTradingAdapter.js";
-import { Logger } from "../Logger";
-import { StateManager } from "../StateManager";
-import { TradingBot } from "../TradingBot";
-import type { BotConfig } from "../types";
+import { Logger } from "../Logger.js";
+import { TradingBot } from "../TradingBot.js";
+import type { BotConfig } from "../types.js";
+import { InMemoryBotStateStore } from "../InMemoryBotStateStore.js";
 import type { Candle as StrategyCandle, IStrategy, Position as StrategyPosition, Signal } from "../../strategies/IStrategy";
 
 const mockData = vi.hoisted(() => {
@@ -126,11 +126,9 @@ describe("TradingBot", () => {
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
 
-    // Step 2: Initialize logger and state manager.
+    // Step 2: Initialize logger and state store.
     const logger = new Logger("bot-test", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
+    const state = new InMemoryBotStateStore();
 
     // Step 3: Build the exchange adapter and strategy.
     const interval: YahooInterval = "1m";

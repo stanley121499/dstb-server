@@ -4,7 +4,7 @@ import { intervalToMs } from "../utils/interval.js";
 /**
  * Resamples candles from a base interval to a coarser interval.
  *
- * Definition (authoritative): `docs/13-data-yfinance-and-intervals.md`
+ * Intervals: see `dstb-docs/raw/docs/architecture.md` and `src/utils/interval.ts` (legacy doc `docs/13` was never checked in).
  * - Open: first open
  * - High: max high
  * - Low: min low

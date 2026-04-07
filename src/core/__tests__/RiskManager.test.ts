@@ -4,11 +4,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { Logger } from "../Logger";
-import { RiskManager } from "../RiskManager";
-import { StateManager } from "../StateManager";
-import type { BotConfig, Position } from "../types";
-import type { Signal } from "../../strategies/IStrategy";
+import { Logger } from "../Logger.js";
+import { RiskManager } from "../RiskManager.js";
+import type { BotConfig, Position } from "../types.js";
+import type { Signal } from "../../strategies/IStrategy.js";
+import { InMemoryBotStateStore } from "../InMemoryBotStateStore.js";
 
 /**
  * Build a minimal bot config for risk testing.
@@ -44,15 +44,12 @@ const buildEntrySignal = (price: number): Signal => {
 
 describe("RiskManager", () => {
   it("blocks entries when daily loss limit exceeded", async () => {
-    // Step 1: Set up SQLite state.
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-risk-"));
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
 
     const logger = new Logger("bot-risk", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
+    const state = new InMemoryBotStateStore();
     const config = buildConfig();
     const botId = await state.createBot(config);
 
@@ -88,15 +85,12 @@ describe("RiskManager", () => {
   });
 
   it("blocks entries when position size exceeds maxPositionSizePct", async () => {
-    // Step 1: Set up SQLite state.
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-risk-"));
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
 
     const logger = new Logger("bot-risk", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
+    const state = new InMemoryBotStateStore();
     const config = buildConfig({ riskManagement: { maxDailyLossPct: 5, maxPositionSizePct: 10 } });
     const botId = await state.createBot(config);
 
@@ -117,15 +111,12 @@ describe("RiskManager", () => {
   });
 
   it("blocks entries when a position is already open", async () => {
-    // Step 1: Set up SQLite state.
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-risk-"));
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
 
     const logger = new Logger("bot-risk", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
+    const state = new InMemoryBotStateStore();
     const config = buildConfig();
     const botId = await state.createBot(config);
 
@@ -158,15 +149,12 @@ describe("RiskManager", () => {
   });
 
   it("allows entries when checks pass", async () => {
-    // Step 1: Set up SQLite state.
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-risk-"));
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
 
     const logger = new Logger("bot-risk", logDir);
-    const dbPath = path.join(tempDir, "bot-state.db");
-    const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-    const state = new StateManager({ dbPath, schemaPath, logger });
+    const state = new InMemoryBotStateStore();
     const config = buildConfig();
     const botId = await state.createBot(config);
 

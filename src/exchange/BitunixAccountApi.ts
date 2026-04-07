@@ -29,6 +29,7 @@ export class BitunixAccountApi {
     const response = await this.client.request({
       method: "GET",
       path: "/api/v1/futures/account",
+      query: { marginCoin: quoteCurrency },
       isPrivate: true
     });
     const { currency, available, locked, total } = parseBalance(response, quoteCurrency);

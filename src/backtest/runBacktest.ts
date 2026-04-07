@@ -84,9 +84,9 @@ function toExitReason(reason: string): TradeInsert["exit_reason"] {
  * Runs a deterministic backtest simulation over candles.
  *
  * Implements the core rules from:
- * - `docs/12-strategy-orb-atr.md`
- * - `docs/14-backtest-engine.md`
- * - `docs/13-data-yfinance-and-intervals.md` (missing opening range policy)
+ * - `dstb-docs/raw/docs/strategy-orb-atr.md`
+ * - `dstb-docs/raw/docs/backtest-engine.md`
+ * - `dstb-docs/raw/docs/architecture.md` (data paths; legacy `docs/13` not in repo)
  */
 export function runBacktest(args: Readonly<{
   runId: string;
@@ -381,7 +381,7 @@ export function runBacktest(args: Readonly<{
 
       // If we enter intrabar (stop_breakout), it is possible that SL/TP was also
       // touched in the same bar. We do NOT attempt to model that here beyond the
-      // conservative exit ordering defined in docs/14.
+      // conservative exit ordering defined in backtest-engine.md.
       // We evaluate exits starting on subsequent iterations.
     }
 

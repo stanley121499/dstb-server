@@ -1,7 +1,8 @@
 import type { Position as ExchangePosition } from "../exchange/types.js";
 
 import { Logger } from "./Logger";
-import { StateManager } from "./StateManager";
+import type { BotStateStore } from "./BotStateStore.js";
+import { isBotStateStore } from "./BotStateStore.js";
 import type { Position, PositionSide } from "./types";
 
 /**
@@ -18,7 +19,7 @@ export type PositionReconcileResult = Readonly<{
  * PositionManager keeps DB state aligned with exchange positions.
  */
 export class PositionManager {
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
 
   /**
@@ -34,10 +35,10 @@ export class PositionManager {
    * Error behavior:
    * - Throws if inputs are invalid.
    */
-  constructor(stateManager: StateManager, logger: Logger) {
+  constructor(stateManager: BotStateStore, logger: Logger) {
     // Step 1: Validate constructor inputs.
-    if (!(stateManager instanceof StateManager)) {
-      throw new Error("PositionManager requires a valid StateManager instance.");
+    if (!isBotStateStore(stateManager)) {
+      throw new Error("PositionManager requires a valid BotStateStore instance.");
     }
     if (!(logger instanceof Logger)) {
       throw new Error("PositionManager requires a valid Logger instance.");
@@ -205,16 +206,19 @@ export class PositionManager {
         };
       }
 
-      await this.stateManager.updatePosition(dbPosition.id, {
+      const posUpdates: Partial<Position> = {
         side: exchangeSide,
         quantity: args.exchangePosition.quantity,
         entryPrice: args.exchangePosition.entryPrice,
-        entryTime: this.parseUtcMs(args.exchangePosition.openedAtUtc),
-        // Preserve stopLoss and takeProfit from DB - exchange doesn't return these
-        // and the strategy needs them for software-based exit checks.
-        stopLoss: dbPosition.stopLoss,
-        takeProfit: dbPosition.takeProfit
-      });
+        entryTime: this.parseUtcMs(args.exchangePosition.openedAtUtc)
+      };
+      if (dbPosition.stopLoss !== undefined) {
+        posUpdates.stopLoss = dbPosition.stopLoss;
+      }
+      if (dbPosition.takeProfit !== undefined) {
+        posUpdates.takeProfit = dbPosition.takeProfit;
+      }
+      await this.stateManager.updatePosition(dbPosition.id, posUpdates);
 
       this.logger.warn("Updated DB position to match exchange snapshot", {
         event: "position_reconcile_update",

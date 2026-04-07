@@ -443,7 +443,9 @@ function pickBalanceEntry(entries: readonly unknown[], quoteCurrency: string): J
 function parseBalanceEntry(entry: JsonRecord, currency: string): ParsedBalance {
   const available = extractNumber(entry, ["free", "available", "availableBalance"], 0);
   const locked = extractNumber(entry, ["locked", "frozen"], 0);
-  const total = extractNumber(entry, ["total", "balance"], available + locked);
+  // Bitunix futures account uses "walletBalance" for total wallet balance
+  // (available + in-use margin). Fall back to available+locked if neither present.
+  const total = extractNumber(entry, ["walletBalance", "currencyEquity", "total", "balance"], available + locked);
   return { currency, available, locked, total };
 }
 

@@ -14,11 +14,11 @@ export type Candle = Readonly<{
 }>;
 
 /**
- * Intervals supported by Phase 1 (aligned with docs/13 and the API schemas).
+ * Intervals supported by Phase 1 (aligned with `src/utils/interval.ts` and API schemas).
  *
  * Note: `yahoo-finance2` has its own interval union; this type matches the subset we use.
  */
-export type YahooInterval = "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "90m" | "1h" | "1d";
+export type YahooInterval = "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "90m" | "1h" | "4h" | "1d";
 
 export type CandleFetchResult = Readonly<{
   candles: readonly Candle[];
@@ -128,12 +128,12 @@ export async function fetchYahooCandles(args: Readonly<{
   const raw = await yahooFinance.chart(args.symbol, {
     period1: new Date(args.startTimeUtc),
     period2: new Date(args.endTimeUtc),
-    interval: args.interval
+    interval: args.interval as "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "90m" | "1h" | "1d"
   });
 
   const parsed = chartResultSchema.parse(raw);
 
-  // Convert to candles, then sort + dedupe by timestamp (docs/13).
+  // Convert to candles, then sort + dedupe by timestamp (see architecture + interval helpers).
   // We accept Yahoo's raw null OHLC values (schema-level), but we do NOT allow nulls into Candle[].
   // Instead, we drop invalid rows here and emit aggregated warnings (not per-row spam).
   const droppedNullOhlcSamples: string[] = [];
@@ -246,7 +246,7 @@ export async function fetchYahooCandles(args: Readonly<{
     );
   }
 
-  // Fingerprint: stable hash over normalized candle rows (docs/13).
+  // Fingerprint: stable hash over normalized candle rows.
   const hasher = new Sha256();
   for (const c of validated) {
     hasher.update(`${c.timeUtcMs}|${c.open}|${c.high}|${c.low}|${c.close}|${c.volume}\n`);

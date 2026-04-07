@@ -1,0 +1,59 @@
+{
+  "name": "ETH Live Bot v3",
+  "strategy": "orb-atr",
+  "exchange": "bitunix",
+  "symbol": "ETH-USD",
+  "interval": "15m",
+  "initialBalance": 500,
+  "riskManagement": {
+    "maxDailyLossPct": 10,
+    "maxPositionSizePct": 50
+  },
+  "params": {
+    "version": "1.0",
+    "intervalMinutes": 15,
+    "session": {
+      "timezone": "America/New_York",
+      "startTime": "09:30",
+      "openingRangeMinutes": 30
+    },
+    "entry": {
+      "directionMode": "long_short",
+      "entryMode": "stop_breakout",
+      "breakoutBufferBps": 5,
+      "maxTradesPerSession": 2
+    },
+    "atr": {
+      "atrLength": 14,
+      "atrFilter": {
+        "enabled": false,
+        "minAtrBps": 0,
+        "maxAtrBps": 1000
+      }
+    },
+    "risk": {
+      "sizingMode": "fixed_risk_pct",
+      "riskPctPerTrade": 1.0,
+      "fixedNotional": 0,
+      "stopMode": "atr_multiple",
+      "atrStopMultiple": 2.0,
+      "takeProfitMode": "r_multiple",
+      "tpRMultiple": 3.0,
+      "trailingStopMode": "disabled",
+      "atrTrailMultiple": 1.5,
+      "timeExitMode": "disabled",
+      "barsAfterEntry": 0,
+      "sessionEndTime": "16:00"
+    },
+    "execution": {
+      "feeBps": 10,
+      "slippageBps": 10
+    }
+  },
+  "bitunix": {
+    "apiKey": "${BITUNIX_API_KEY}",
+    "secretKey": "${BITUNIX_SECRET_KEY}",
+    "testMode": false,
+    "marketType": "futures"
+  }
+}

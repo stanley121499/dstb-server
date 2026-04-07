@@ -1,5 +1,6 @@
 import { Logger } from "./Logger";
-import { StateManager } from "./StateManager";
+import type { BotStateStore } from "./BotStateStore.js";
+import { isBotStateStore } from "./BotStateStore.js";
 import type { BotConfig, Position } from "./types";
 import type { Signal } from "../strategies/IStrategy";
 
@@ -16,7 +17,7 @@ export type RiskCheckResult = Readonly<{
  * RiskManager evaluates pre-trade constraints and daily loss limits.
  */
 export class RiskManager {
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
 
   /**
@@ -32,10 +33,10 @@ export class RiskManager {
    * Error behavior:
    * - Throws on invalid dependencies.
    */
-  constructor(stateManager: StateManager, logger: Logger) {
+  constructor(stateManager: BotStateStore, logger: Logger) {
     // Step 1: Validate dependencies.
-    if (!(stateManager instanceof StateManager)) {
-      throw new Error("RiskManager requires a valid StateManager instance.");
+    if (!isBotStateStore(stateManager)) {
+      throw new Error("RiskManager requires a valid BotStateStore instance.");
     }
     if (!(logger instanceof Logger)) {
       throw new Error("RiskManager requires a valid Logger instance.");

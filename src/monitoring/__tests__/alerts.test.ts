@@ -4,22 +4,18 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { Logger } from "../../core/Logger";
-import { StateManager } from "../../core/StateManager";
-import { BotConfig } from "../../core/types";
+import { Logger } from "../../core/Logger.js";
+import { BotConfig } from "../../core/types.js";
+import { InMemoryBotStateStore } from "../../core/InMemoryBotStateStore.js";
 import { EmailAlerter, EmailTransporter } from "../EmailAlerter";
 import { GoogleSheetsReporter, SheetsClient } from "../GoogleSheetsReporter";
 import { parseTelegramCommand, TelegramAlerter, TelegramFetcher } from "../TelegramAlerter";
 
 /**
- * Build a temporary StateManager instance for tests.
+ * Build an in-memory BotStateStore for tests.
  */
-const createStateManager = (): StateManager => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dstb-state-"));
-  const dbPath = path.join(tempDir, "bot-state.db");
-  const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-  const logger = new Logger("test-bot", tempDir);
-  return new StateManager({ dbPath, schemaPath, logger });
+const createStateManager = (): InMemoryBotStateStore => {
+  return new InMemoryBotStateStore();
 };
 
 /**
@@ -158,7 +154,9 @@ describe("GoogleSheetsReporter", () => {
         }),
         batchUpdate: async () => ({}),
         values: {
-          update: async () => ({})
+          update: async () => ({}),
+          clear: async () => ({}),
+          append: async () => ({})
         }
       }
     };

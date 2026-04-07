@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { Logger } from "../../core/Logger";
-import { StateManager } from "../../core/StateManager";
-import type { RawCliArgs } from "./cliTypes";
+import { Logger } from "../../core/Logger.js";
+import { SupabaseStateStore } from "../../core/SupabaseStateStore.js";
+import type { RawCliArgs } from "./cliTypes.js";
 
 /**
  * Daemon registry record persisted to disk.
@@ -39,43 +38,29 @@ export function resolveBotPaths(): Readonly<{
   dataDir: string;
   logDir: string;
   daemonDir: string;
-  dbPath: string;
-  schemaPath: string;
 }> {
   // Step 1: Resolve base directories from project root.
   const root = resolveProjectRoot();
   const dataDir = path.join(root, "data");
   const logDir = path.join(root, "logs");
   const daemonDir = path.join(dataDir, "daemon");
-  const dbPath = path.join(dataDir, "bot-state.db");
-  const schemaPath = path.join(dataDir, "schema.sql");
 
   return {
     dataDir,
     logDir,
-    daemonDir,
-    dbPath,
-    schemaPath
+    daemonDir
   };
 }
 
 /**
- * Create a StateManager instance using standard paths.
+ * Create a Supabase-backed state store (requires SUPABASE_* env vars).
  */
-export function createStateManager(loggerId: string): StateManager {
-  // Step 1: Resolve storage paths and ensure directories exist.
+export function createStateManager(loggerId: string): SupabaseStateStore {
   const paths = resolveBotPaths();
   ensureDirectory(paths.dataDir);
   ensureDirectory(paths.logDir);
-  // Step 2: Create a logger scoped to CLI operations.
   const logger = new Logger(loggerId, paths.logDir);
-
-  // Step 3: Return a ready StateManager instance.
-  return new StateManager({
-    dbPath: paths.dbPath,
-    schemaPath: paths.schemaPath,
-    logger
-  });
+  return SupabaseStateStore.fromEnv(logger);
 }
 
 /**
@@ -329,10 +314,7 @@ export function toLocalDateString(date: Date): string {
  * Resolve the CLI entry path for spawning daemon processes.
  */
 export function resolveCliEntryPath(): string {
-  // Step 1: Resolve the current module path and return CLI entry.
-  const currentFile = fileURLToPath(import.meta.url);
-  const currentDir = path.dirname(currentFile);
-  return path.resolve(currentDir, "..", "index.ts");
+  return path.resolve(resolveProjectRoot(), "src", "cli", "index.ts");
 }
 
 /**

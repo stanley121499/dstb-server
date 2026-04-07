@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { BotConfig } from "../../core/types";
 import { createExchangeAdapter } from "../../exchange/createAdapter.js";
-import type { ExchangeAdapterConfig } from "../../exchange/createAdapter.js";
+import type { BitunixAdapterConfig, ExchangeAdapterConfig } from "../../exchange/createAdapter.js";
 import type { YahooInterval } from "../../data/yahooFinance.js";
 import type { IExchangeAdapter } from "../../exchange/IExchangeAdapter.js";
 
@@ -46,29 +46,32 @@ export function resolveExecutionConfig(
  * Build the exchange adapter for a given bot config.
  */
 export function buildExchangeAdapter(config: BotConfig): IExchangeAdapter {
-  // Step 1: Build adapter config based on exchange type.
   const interval = parseYahooInterval(config.interval);
-  const adapterConfig: ExchangeAdapterConfig =
-    config.exchange === "paper"
-      ? {
-          type: "paper",
-          symbol: config.symbol,
-          interval,
-          initialBalance: config.initialBalance,
-          feesBps: resolveExecutionConfig(config.params).feeBps,
-          slippageBps: resolveExecutionConfig(config.params).slippageBps,
-          currency: "USD"
-        }
-      : {
-          type: "bitunix",
-          symbol: config.symbol,
-          interval,
-          apiKey: config.bitunix?.apiKey,
-          apiSecret: config.bitunix?.secretKey,
-          testMode: config.bitunix?.testMode,
-          marketType: config.bitunix?.marketType
-        };
+  const execution = resolveExecutionConfig(config.params);
 
-  // Step 2: Create and return the concrete exchange adapter.
-  return createExchangeAdapter(adapterConfig);
+  if (config.exchange === "paper") {
+    const adapterConfig: ExchangeAdapterConfig = {
+      type: "paper",
+      symbol: config.symbol,
+      interval,
+      initialBalance: config.initialBalance,
+      feesBps: execution.feeBps,
+      slippageBps: execution.slippageBps,
+      currency: "USD"
+    };
+    return createExchangeAdapter(adapterConfig);
+  }
+
+  const bx = config.bitunix;
+  const bitunixCfg: BitunixAdapterConfig = {
+    type: "bitunix",
+    symbol: config.symbol,
+    interval,
+    ...(bx?.apiKey !== undefined ? { apiKey: bx.apiKey } : {}),
+    ...(bx?.secretKey !== undefined ? { apiSecret: bx.secretKey } : {}),
+    ...(bx?.testMode !== undefined ? { testMode: bx.testMode } : {}),
+    ...(bx?.marketType !== undefined ? { marketType: bx.marketType } : {})
+  };
+
+  return createExchangeAdapter(bitunixCfg);
 }

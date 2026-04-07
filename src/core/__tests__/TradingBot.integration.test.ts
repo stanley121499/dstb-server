@@ -7,11 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { YahooInterval } from "../../data/yahooFinance.js";
 import { PaperTradingAdapter } from "../../exchange/PaperTradingAdapter.js";
 import type { Candle as StrategyCandle, IStrategy, Position as StrategyPosition, Signal } from "../../strategies/IStrategy";
-import { Logger } from "../Logger";
-import { StateManager } from "../StateManager";
-import { TradingBot } from "../TradingBot";
-import type { BotConfig } from "../types";
-import { buildCandleSeries, buildMockBinanceFetcher } from "./helpers/candleSeries";
+import { Logger } from "../Logger.js";
+import { TradingBot } from "../TradingBot.js";
+import type { BotConfig } from "../types.js";
+import { buildCandleSeries, buildMockBinanceFetcher } from "./helpers/candleSeries.js";
+import { InMemoryBotStateStore } from "../InMemoryBotStateStore.js";
 
 const mockedBinance = vi.hoisted(() => {
   return {
@@ -147,19 +147,17 @@ function buildConfig(name: string, interval: YahooInterval): BotConfig {
 }
 
 /**
- * Creates a StateManager and Logger backed by a temp directory.
+ * Creates an in-memory store and Logger backed by a temp directory.
  */
 function createTestState(
   testName: string
-): Readonly<{ state: StateManager; logger: Logger; tempDir: string; dbPath: string; schemaPath: string }> {
+): Readonly<{ state: InMemoryBotStateStore; logger: Logger; tempDir: string }> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `dstb-${testName}-`));
   const logDir = path.join(tempDir, "logs");
   fs.mkdirSync(logDir, { recursive: true });
   const logger = new Logger(testName, logDir);
-  const dbPath = path.join(tempDir, "bot-state.db");
-  const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-  const state = new StateManager({ dbPath, schemaPath, logger });
-  return { state, logger, tempDir, dbPath, schemaPath };
+  const state = new InMemoryBotStateStore();
+  return { state, logger, tempDir };
 }
 
 describe("TradingBot integration", () => {
@@ -180,7 +178,7 @@ describe("TradingBot integration", () => {
     );
 
     // Step 2: Build bot dependencies.
-    const { state, logger, dbPath, schemaPath } = createTestState("lifecycle");
+    const { state, logger } = createTestState("lifecycle");
     const exchange = new PaperTradingAdapter({
       symbol: "BTC-USD",
       interval: "1m",
@@ -213,9 +211,7 @@ describe("TradingBot integration", () => {
     expect(trades.length).toBeGreaterThan(0);
     expect(openPositions.length).toBe(0);
 
-    // Step 5: Reload state manager to confirm persistence.
-    const reloadedState = new StateManager({ dbPath, schemaPath, logger });
-    const reloadedBot = await reloadedState.getBot(botId);
+    const reloadedBot = await state.getBot(botId);
     expect(reloadedBot).not.toBeNull();
 
     vi.useRealTimers();

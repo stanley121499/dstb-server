@@ -27,6 +27,7 @@ function toBinanceInterval(interval: YahooInterval): string {
     "60m": "1h",
     "90m": "1h", // Binance doesn't have 90m, we'll need to resample or use 1h
     "1h": "1h",
+    "4h": "4h",   // Binance supports 4h natively
     "1d": "1d"
   };
   return map[interval] ?? "1h";
@@ -81,7 +82,7 @@ export async function fetchBinanceCandles(args: Readonly<{
   const warnings: string[] = [];
   const binanceSymbol = toBinanceSymbol(args.symbol);
   const binanceInterval = toBinanceInterval(args.interval);
-  
+
   const startMs = new Date(args.startTimeUtc).getTime();
   const endMs = new Date(args.endTimeUtc).getTime();
 
@@ -102,7 +103,7 @@ export async function fetchBinanceCandles(args: Readonly<{
   // Binance limits to 1000 candles per request, so we may need multiple requests
   while (currentStartMs < endMs) {
     url.searchParams.set("startTime", currentStartMs.toString());
-    
+
     try {
       const response = await fetch(url.toString(), {
         method: "GET",
@@ -118,7 +119,7 @@ export async function fetchBinanceCandles(args: Readonly<{
       }
 
       const data: unknown = await response.json();
-      
+
       if (!Array.isArray(data)) {
         throw new Error(`Binance API returned non-array response`);
       }
@@ -133,7 +134,7 @@ export async function fetchBinanceCandles(args: Readonly<{
       for (const kline of data) {
         try {
           const parsed = binanceKlineSchema.parse(kline);
-          
+
           const timeUtcMs = parsed[0];
           const open = parseFloat(parsed[1]);
           const high = parseFloat(parsed[2]);
@@ -142,8 +143,8 @@ export async function fetchBinanceCandles(args: Readonly<{
           const volume = parseFloat(parsed[5]);
 
           // Validate OHLCV data
-          if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || 
-              !Number.isFinite(close) || !Number.isFinite(volume)) {
+          if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) ||
+            !Number.isFinite(close) || !Number.isFinite(volume)) {
             warnings.push(`Skipped candle with non-finite OHLCV at ${new Date(timeUtcMs).toISOString()}`);
             continue;
           }

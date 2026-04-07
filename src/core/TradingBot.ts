@@ -7,8 +7,9 @@ import { Logger } from "./Logger";
 import { OrderExecutor } from "./OrderExecutor";
 import { PositionManager } from "./PositionManager";
 import { RiskManager } from "./RiskManager";
-import { StateManager } from "./StateManager";
-import type { Bot, BotConfig, Position } from "./types";
+import type { BotStateStore } from "./BotStateStore.js";
+import { isBotStateStore } from "./BotStateStore.js";
+import type { Bot, BotConfig, Position } from "./types.js";
 
 /**
  * Optional alerting adapter for error notifications.
@@ -25,7 +26,7 @@ export type TradingBotOptions = Readonly<{
   config: BotConfig;
   strategy: IStrategy;
   exchange: IExchangeAdapter;
-  stateManager: StateManager;
+  stateManager: BotStateStore;
   logger: Logger;
   alerting?: AlertingAdapter;
   maxIterations?: number;
@@ -41,7 +42,7 @@ export class TradingBot {
   private readonly config: BotConfig;
   private readonly strategy: IStrategy;
   private readonly exchange: IExchangeAdapter;
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
   private readonly alerting?: AlertingAdapter;
   private readonly positionManager: PositionManager;
@@ -79,8 +80,8 @@ export class TradingBot {
     if (options.exchange === null || options.exchange === undefined) {
       throw new Error("TradingBot requires a valid exchange adapter.");
     }
-    if (!(options.stateManager instanceof StateManager)) {
-      throw new Error("TradingBot requires a valid StateManager instance.");
+    if (!isBotStateStore(options.stateManager)) {
+      throw new Error("TradingBot requires a valid BotStateStore instance.");
     }
     if (!(options.logger instanceof Logger)) {
       throw new Error("TradingBot requires a valid Logger instance.");
@@ -93,10 +94,16 @@ export class TradingBot {
     this.exchange = options.exchange;
     this.stateManager = options.stateManager;
     this.logger = options.logger;
-    this.alerting = options.alerting;
+    if (options.alerting !== undefined) {
+      this.alerting = options.alerting;
+    }
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
-    this.maxIterations = options.maxIterations;
-    this.candleIntervalMsOverride = options.candleIntervalMsOverride;
+    if (options.maxIterations !== undefined) {
+      this.maxIterations = options.maxIterations;
+    }
+    if (options.candleIntervalMsOverride !== undefined) {
+      this.candleIntervalMsOverride = options.candleIntervalMsOverride;
+    }
 
     // Step 3: Initialize managers.
     this.positionManager = new PositionManager(this.stateManager, this.logger);
@@ -138,11 +145,34 @@ export class TradingBot {
     // Step 4: Reconcile positions with exchange.
     await this.reconcilePositions();
 
+    // Step 4b: Cancel any orphaned open orders left by previous crashed sessions.
+    await this.cancelOrphanedOrders();
+
     // Step 5: Initialize strategy with historical candles.
     await this.initializeStrategy();
 
-    // Step 6: Start main loop.
+    // Step 6: Sync equity from live exchange balance before entering the loop.
+    // This ensures /status shows the real account balance, not the config's initialBalance.
+    try {
+      const balance = await this.exchange.getBalance();
+      if (typeof balance.total === "number" && balance.total > 0) {
+        await this.stateManager.updateBotEquity(this.id, balance.total);
+        this.logger.info(`Equity synced from exchange: ${balance.total} ${balance.currency}`, {
+          event: "equity_sync",
+          equity: balance.total,
+          currency: balance.currency
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Could not sync equity from exchange: ${msg}`, {
+        event: "equity_sync_failed"
+      });
+    }
+
+    // Step 7: Start main loop.
     await this.mainLoop();
+
   }
 
   /**
@@ -196,6 +226,11 @@ export class TradingBot {
         // Step 4: Load current DB position.
         const dbPosition = await this.positionManager.getOpenPosition(this.id);
         const strategyPosition = dbPosition ? this.toStrategyPosition(dbPosition) : null;
+
+        // Step 4b: If no open position, sweep any orphaned orders (e.g. from failed entries).
+        if (dbPosition === null) {
+          await this.cancelOrphanedOrders();
+        }
 
         // Step 5: Ask strategy for a signal.
         const signal = this.strategy.onCandle(this.toStrategyCandle(candle), strategyPosition);
@@ -509,6 +544,44 @@ export class TradingBot {
   }
 
   /**
+   * Cancels all open orders on the exchange for this symbol.
+   * Called on startup to clean up orphaned orders left by previous crashed sessions.
+   */
+  private async cancelOrphanedOrders(): Promise<void> {
+    try {
+      const openOrders = await this.exchange.getOpenOrders();
+      if (openOrders.length === 0) return;
+
+      this.logger.info(`Cancelling ${openOrders.length} orphaned open order(s) from previous session.`, {
+        event: "orphan_order_cancel",
+        count: openOrders.length
+      });
+
+      for (const order of openOrders) {
+        try {
+          await this.exchange.cancelOrder(order.id);
+          this.logger.debug(`Cancelled orphaned order ${order.id}`, {
+            event: "orphan_order_cancelled",
+            orderId: order.id
+          });
+        } catch (err: unknown) {
+          // Non-fatal — log and continue.
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`Failed to cancel orphaned order ${order.id}: ${msg}`, {
+            event: "orphan_order_cancel_failed",
+            orderId: order.id
+          });
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Could not fetch open orders for cleanup: ${msg}`, {
+        event: "orphan_order_fetch_failed"
+      });
+    }
+  }
+
+  /**
    * Reconciles DB positions with the exchange snapshot.
    */
   private async reconcilePositions(): Promise<void> {
@@ -579,6 +652,16 @@ export class TradingBot {
     if (this.lastHeartbeatAt === null || now - this.lastHeartbeatAt >= this.heartbeatIntervalMs) {
       await this.stateManager.updateBotHeartbeat(this.id);
       this.lastHeartbeatAt = now;
+
+      // Sync live equity from exchange on every heartbeat so /status stays accurate.
+      try {
+        const balance = await this.exchange.getBalance();
+        if (typeof balance.total === "number" && balance.total > 0) {
+          await this.stateManager.updateBotEquity(this.id, balance.total);
+        }
+      } catch {
+        // Non-fatal — stale equity is acceptable between heartbeats.
+      }
     }
   }
 
@@ -642,15 +725,15 @@ export class TradingBot {
    * Converts core DB positions to strategy positions.
    */
   private toStrategyPosition(position: Position): StrategyPosition {
-    return {
+    const base: StrategyPosition = {
       id: position.id,
       side: position.side === "LONG" ? "long" : "short",
       entryPrice: position.entryPrice,
       quantity: position.quantity,
       stopLoss: position.stopLoss ?? position.entryPrice,
-      takeProfit: position.takeProfit,
       entryTime: position.entryTime
     };
+    return position.takeProfit !== undefined ? { ...base, takeProfit: position.takeProfit } : base;
   }
 
   /**
@@ -663,22 +746,30 @@ export class TradingBot {
     }
 
     // Step 2: Get risk parameters with fallback to defaults
-    const riskParams = this.config.params?.risk;
+    const rawRisk = this.config.params["risk"];
+    const riskParams =
+      rawRisk !== undefined && typeof rawRisk === "object" && rawRisk !== null
+        ? (rawRisk as Record<string, unknown>)
+        : undefined;
     let quantity: number;
 
-    if (riskParams?.sizingMode === "fixed_risk_pct") {
+    if (riskParams?.["sizingMode"] === "fixed_risk_pct") {
       // Risk-based position sizing: risk% of equity per trade
       if (!signal.stopLoss || !this.isPositiveNumber(signal.stopLoss)) {
         throw new Error("Cannot calculate risk-based position size without stop loss.");
       }
 
-      const riskAmount = equity * (riskParams.riskPctPerTrade / 100);
+      const riskPct = riskParams["riskPctPerTrade"];
+      const riskPctNum = typeof riskPct === "number" ? riskPct : Number(riskPct);
+      const riskAmount = equity * (riskPctNum / 100);
       const riskPerUnit = Math.abs(marketPrice - signal.stopLoss);
       quantity = riskPerUnit > 0 ? riskAmount / riskPerUnit : 0;
 
-    } else if (riskParams?.sizingMode === "fixed_notional") {
+    } else if (riskParams?.["sizingMode"] === "fixed_notional") {
       // Fixed notional position sizing
-      quantity = riskParams.fixedNotional / marketPrice;
+      const fn = riskParams["fixedNotional"];
+      const fixedNotional = typeof fn === "number" ? fn : Number(fn);
+      quantity = fixedNotional / marketPrice;
 
     } else {
       // Fallback: use max position size percent

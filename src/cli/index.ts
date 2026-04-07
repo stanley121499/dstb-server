@@ -6,6 +6,8 @@ import { runReconcile } from "./commands/reconcile";
 import { runStart } from "./commands/start";
 import { runStatus } from "./commands/status";
 import { runStop } from "./commands/stop";
+import { runBehaviorBacktest } from "./commands/behaviorBacktest";
+import { runBehaviorLive } from "./commands/behaviorLive";
 import type { CliCommand, ParsedCliArgs } from "./commands/cliTypes";
 import { parseArgv } from "./commands/cliUtils";
 
@@ -15,7 +17,9 @@ const supportedCommands: Readonly<CliCommand[]> = [
   "status",
   "logs",
   "backtest",
-  "reconcile"
+  "reconcile",
+  "behavior:backtest",
+  "behavior:live"
 ];
 
 const booleanFlags = [
@@ -78,6 +82,12 @@ async function main(): Promise<void> {
     case "reconcile":
       await runReconcile(parsed);
       return;
+    case "behavior:backtest":
+      await runBehaviorBacktest(parsed);
+      return;
+    case "behavior:live":
+      await runBehaviorLive(parsed);
+      return;
     default:
       throw new Error(`Unsupported command "${parsed.command}".`);
   }
@@ -100,6 +110,8 @@ function printHelp(): void {
     "  logs        View bot logs",
     "  backtest    Run a backtest",
     "  reconcile   Reconcile state with exchange",
+    "  behavior:backtest   Run S2 behavior backtest",
+    "  behavior:live       Start S2 behavior live bot",
     "",
     "Global Options:",
     "  --help      Show help for command",

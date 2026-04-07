@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Strategy parameter payload schema (authoritative) from `docs/12-strategy-orb-atr.md`.
+ * Strategy parameter payload schema (authoritative) from `dstb-docs/raw/docs/strategy-orb-atr.md`.
  *
  * Notes:
  * - This schema is used for request validation and for validating JSONB rows
@@ -64,7 +64,7 @@ export const strategyParamsSchema = z
         /**
          * Fixed notional per trade (used when sizingMode === "fixed_notional").
          *
-         * Note: docs/12 mentions fixed_notional sizing but does not specify a field name.
+         * Note: strategy-orb-atr.md mentions fixed_notional sizing but does not specify a field name.
          * The Phase 1 UI uses `risk.fixedNotional`, so the API accepts and validates it.
          */
         fixedNotional: z.number().min(0).optional().default(0),

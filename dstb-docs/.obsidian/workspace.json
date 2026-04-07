@@ -1,0 +1,218 @@
+{
+  "main": {
+    "id": "aec62b7c44db18ff",
+    "type": "split",
+    "children": [
+      {
+        "id": "0bfb3fd5e6ff71a5",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e3e4b1e7036f4a97",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9ea8b13bc7841a92",
+    "type": "split",
+    "children": [
+      {
+        "id": "26f5e216c72d4f6e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "158e9b30592e22c4",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "d82b52714c10952a",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "ef71e13598ea634c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "21d528917cb7433b",
+    "type": "split",
+    "children": [
+      {
+        "id": "e06b028c6c8c7b5c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2dd039eb971cdb67",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "7edb44876eebf21f",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "252c59c73d001d8a",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "156e57819fb46b0f",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "4236f9cf99685c8b",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "e3e4b1e7036f4a97",
+  "lastOpenFiles": [
+    "wiki/overview.md",
+    "wiki/concepts/supabase-v3-migration.md",
+    "wiki/synthesis/v3-planning-document-set.md",
+    "wiki/synthesis",
+    "wiki/sources/behavior-backtest-csv-3-0.md",
+    "wiki/sources/v3-supabase-schema-design.md",
+    "wiki/sources/v3-phase-rollout-plan.md",
+    "raw/2026-04-07-dashboard-spec.md",
+    "raw/2026-04-07-behavior-system-design.md",
+    "raw/2026-04-07-phase-plan-v3.md",
+    "raw/2026-04-07-architecture-plan-v3.md",
+    "raw/2026-04-07-schema-design-v3.md",
+    "raw/3.0_Behavior_Backtest_01 - 1) BEHAVIOR-RAW DATA.csv",
+    "raw/3.0_Behavior_Backtest_01 - 2) BEHAVIOR-ENVIRONMENT-OVERVIEW (1).csv",
+    "raw/docs/deployment-guide.md",
+    "wiki/sources/raw-docs-readme.md",
+    "log.md",
+    "index.md",
+    "wiki/entities/dstb-trading-bot.md",
+    "wiki/entities",
+    "wiki/concepts/documentation-index.md",
+    "wiki/concepts",
+    "Welcome.md",
+    "wiki/sources",
+    "wiki",
+    "raw/assets",
+    "raw/README.md",
+    "raw/docs/bitunix docs/transfer asset from subAccount to main account _ Bitunix OpenApi_files/vcd15cbe7772f49c399c6a5babf22c1241717689176015",
+    "raw/docs/bitunix docs/transfer asset from subAccount to main account _ Bitunix OpenApi_files/app.BukVYJ9d.js.download",
+    "raw/docs/reports/performance-benchmark.md",
+    "raw/docs/reports/paper-trading-comparison.md",
+    "raw/docs/reports/documentation-review.md",
+    "raw/docs/strategy-plugin-guide.md",
+    "raw/docs/strategy-orb-atr.md",
+    "raw/docs/README.md",
+    "raw/docs/monitoring-setup.md"
+  ]
+}

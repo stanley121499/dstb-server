@@ -164,8 +164,6 @@ async function applyFixes(args: Readonly<{
       side: args.exchangePosition.side === "long" ? "LONG" : "SHORT",
       quantity: args.exchangePosition.quantity,
       entryPrice: args.exchangePosition.entryPrice,
-      stopLoss: undefined,
-      takeProfit: undefined,
       entryTime
     });
   }
@@ -184,8 +182,6 @@ async function applyFixes(args: Readonly<{
       side: args.exchangePosition.side === "long" ? "LONG" : "SHORT",
       quantity: args.exchangePosition.quantity,
       entryPrice: args.exchangePosition.entryPrice,
-      stopLoss: undefined,
-      takeProfit: undefined,
       entryTime
     });
   }

@@ -1,7 +1,7 @@
 /**
  * Supported CLI command identifiers.
  */
-export type CliCommand = "start" | "stop" | "status" | "logs" | "backtest" | "reconcile";
+export type CliCommand = "start" | "stop" | "status" | "logs" | "backtest" | "reconcile" | "behavior:backtest" | "behavior:live";
 
 /**
  * Parsed CLI arguments from argv input.

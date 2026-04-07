@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "packageManager": "npm@10.9.3",
-
   "scripts": {
     "bootstrap": "npm install",
     "build": "tsc -p tsconfig.json",
@@ -11,32 +10,37 @@
     "lint": "eslint src/ --ext .ts",
     "test:core": "vitest run --config vitest.config.ts",
     "bot": "node --import tsx src/cli/index.ts",
+    "start": "node --import tsx src/server/index.ts",
     "paper:validate": "tsx src/scripts/paperValidation.ts",
     "benchmark:perf": "tsx src/scripts/performanceBenchmark.ts",
+    "behavior:backtest": "npx tsx src/behavior/scripts/runBehaviorBacktest.ts",
+    "behavior:live": "npm run bot -- behavior:live",
     "import-results": "tsx src/scripts/importOptimizationResults.ts",
+    "import:sqlite": "tsx src/scripts/sqliteToSupabaseImport.ts",
     "preinstall": "npx --yes only-allow npm"
   },
   "bin": {
     "bot": "bin/bot.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "@supabase/supabase-js": "^2.101.1",
     "dotenv": "^17.3.1",
     "googleapis": "^149.0.0",
     "luxon": "^3.7.0",
     "nodemailer": "^6.9.16",
+    "tsx": "^4.20.3",
     "ws": "^8.18.3",
     "yahoo-finance2": "^3.11.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "better-sqlite3": "^11.8.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/luxon": "^3.7.1",
     "@types/node": "^25.0.3",
     "@types/nodemailer": "^6.4.17",
     "@types/ws": "^8.5.10",
     "only-allow": "^1.2.2",
-    "tsx": "^4.20.3",
     "typescript": "^5.9.3",
     "vitest": "^2.1.8"
   }

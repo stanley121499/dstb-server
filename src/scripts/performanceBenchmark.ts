@@ -6,7 +6,7 @@ import { intervalToMs } from "../utils/interval.js";
 import { strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
-import { StateManager } from "../core/StateManager";
+import { InMemoryBotStateStore } from "../core/InMemoryBotStateStore.js";
 import { TradingBot } from "../core/TradingBot";
 import type { BotConfig } from "../core/types";
 import type { Candle as StrategyCandle, IStrategy, Position as StrategyPosition, Signal } from "../strategies/IStrategy";
@@ -49,7 +49,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   const defaults = {
     configPath: "configs/strategies/orb-btc-15m.json",
     candleCount: 1000,
-    outputDir: "docs/reports"
+    outputDir: "dstb-docs/raw/docs/reports"
   };
 
   // Step 2: Collect flag values.
@@ -166,9 +166,7 @@ async function runBenchmark(
   const logDir = path.join(tempDir, "logs");
   fs.mkdirSync(logDir, { recursive: true });
   const logger = new Logger("benchmark", logDir);
-  const dbPath = path.join(tempDir, "bot-state.db");
-  const schemaPath = path.join(process.cwd(), "data", "schema.sql");
-  const state = new StateManager({ dbPath, schemaPath, logger });
+  const state = new InMemoryBotStateStore();
   const intervalMs = intervalToMs(config.interval);
   const candles = buildSyntheticCandles({
     startTimeMs: Date.now() - intervalMs * candleCount,

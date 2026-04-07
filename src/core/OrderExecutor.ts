@@ -2,7 +2,8 @@ import type { IExchangeAdapter } from "../exchange/IExchangeAdapter.js";
 import type { Order as ExchangeOrder, OrderSide } from "../exchange/types.js";
 
 import { Logger } from "./Logger";
-import { StateManager } from "./StateManager";
+import type { BotStateStore } from "./BotStateStore.js";
+import { isBotStateStore } from "./BotStateStore.js";
 import type { Order, OrderStatus, Position, PositionSide } from "./types";
 import type { Signal } from "../strategies/IStrategy";
 
@@ -27,7 +28,7 @@ export type ExitExecutionResult = Readonly<{
  */
 export class OrderExecutor {
   private readonly exchange: IExchangeAdapter;
-  private readonly stateManager: StateManager;
+  private readonly stateManager: BotStateStore;
   private readonly logger: Logger;
   private readonly orderPollIntervalMs: number;
   private readonly orderPollAttempts: number;
@@ -48,7 +49,7 @@ export class OrderExecutor {
    */
   constructor(
     exchange: IExchangeAdapter,
-    stateManager: StateManager,
+    stateManager: BotStateStore,
     logger: Logger,
     options?: Readonly<{ orderPollIntervalMs?: number; orderPollAttempts?: number }>
   ) {
@@ -56,8 +57,8 @@ export class OrderExecutor {
     if (exchange === null || exchange === undefined) {
       throw new Error("OrderExecutor requires a valid exchange adapter.");
     }
-    if (!(stateManager instanceof StateManager)) {
-      throw new Error("OrderExecutor requires a valid StateManager instance.");
+    if (!isBotStateStore(stateManager)) {
+      throw new Error("OrderExecutor requires a valid BotStateStore instance.");
     }
     if (!(logger instanceof Logger)) {
       throw new Error("OrderExecutor requires a valid Logger instance.");
@@ -105,8 +106,13 @@ export class OrderExecutor {
       throw new Error("Entry execution requires a positive quantity.");
     }
 
+    const entrySide = args.signal.side;
+    if (entrySide !== "long" && entrySide !== "short") {
+      throw new Error("Entry execution requires signal.side long or short.");
+    }
+
     // Step 2: Place the entry market order.
-    const orderSide = this.toOrderSide(args.signal.side);
+    const orderSide = this.toOrderSide(entrySide);
     this.logger.info("Placing entry market order", {
       event: "order_entry_market",
       botId: args.botId,
@@ -124,21 +130,24 @@ export class OrderExecutor {
 
     // Step 4: Persist the exchange order into SQLite.
     await this.stateManager.createOrder(
-      this.toCoreOrder(args.botId, args.symbol, args.signal.side, finalizedOrder)
+      this.toCoreOrder(args.botId, args.symbol, entrySide, finalizedOrder)
     );
 
     // Step 5: Create a DB position from the filled order.
     const fillPrice = this.getFillPrice(finalizedOrder, args.marketPrice);
-    const position: Position = {
+    const basePosition: Position = {
       id: "pending",
       botId: args.botId,
       symbol: args.symbol,
-      side: this.toPositionSide(args.signal.side),
+      side: this.toPositionSide(entrySide),
       quantity: args.quantity,
       entryPrice: fillPrice,
-      stopLoss: args.signal.stopLoss,
-      takeProfit: args.signal.takeProfit,
       entryTime: Date.now()
+    };
+    const position: Position = {
+      ...basePosition,
+      ...(args.signal.stopLoss !== undefined ? { stopLoss: args.signal.stopLoss } : {}),
+      ...(args.signal.takeProfit !== undefined ? { takeProfit: args.signal.takeProfit } : {})
     };
 
     const positionId = await this.stateManager.createPosition(position);
@@ -298,7 +307,8 @@ export class OrderExecutor {
     signalSide: "long" | "short",
     order: ExchangeOrder
   ): Order {
-    return {
+    const priceRaw = order.price ?? order.averageFillPrice;
+    const base: Order = {
       id: "pending",
       botId,
       clientOrderId: order.id,
@@ -306,10 +316,15 @@ export class OrderExecutor {
       symbol,
       side: this.toPositionSide(signalSide),
       quantity: order.quantity,
-      price: order.price ?? order.averageFillPrice ?? undefined,
       status: this.toCoreOrderStatus(order.status),
-      createdAt: this.parseUtcMs(order.createdAtUtc),
-      filledAt: order.filledAtUtc ? this.parseUtcMs(order.filledAtUtc) : undefined
+      createdAt: this.parseUtcMs(order.createdAtUtc)
+    };
+    return {
+      ...base,
+      ...(priceRaw !== undefined && priceRaw !== null ? { price: priceRaw } : {}),
+      ...(order.filledAtUtc !== undefined && order.filledAtUtc !== null
+        ? { filledAt: this.parseUtcMs(order.filledAtUtc) }
+        : {})
     };
   }
 

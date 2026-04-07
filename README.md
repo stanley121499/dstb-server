@@ -13,53 +13,62 @@ A **bulletproof trading bot** designed for running algorithmic crypto strategies
 
 ## 📚 Documentation
 
-**All documentation is in [`/docs`](./docs/README.md)** (source of truth)
+**LLM Wiki vault:** [`dstb-docs/index.md`](./dstb-docs/index.md) · **Canonical doc files:** [`dstb-docs/raw/docs/README.md`](./dstb-docs/raw/docs/README.md) · **Agent schema:** [`CLAUDE.md`](./CLAUDE.md)
 
 ### Quick Links
 
-- **[📖 Architecture Overview](./docs/architecture.md)** - Start here to understand the simplified system
-- **[🔌 Strategy Plugin Guide](./docs/strategy-plugin-guide.md)** - How to create and test strategies
-- **[🚀 Deployment Guide](./docs/deployment-guide.md)** - Running on Windows/Linux/Cloud
-- **[💻 CLI Reference](./docs/cli-reference.md)** - All available commands
-- **[📊 Monitoring Setup](./docs/monitoring-setup.md)** - Telegram + Google Sheets
-- **[📈 Backtest Engine](./docs/backtest-engine.md)** - Understanding strategy backtesting
+- **[📖 Architecture Overview](./dstb-docs/raw/docs/architecture.md)** - Start here to understand the simplified system
+- **[🔌 Strategy Plugin Guide](./dstb-docs/raw/docs/strategy-plugin-guide.md)** - How to create and test strategies
+- **[🚀 Deployment Guide](./dstb-docs/raw/docs/deployment-guide.md)** - Running on Windows/Linux/Cloud
+- **[💻 CLI Reference](./dstb-docs/raw/docs/cli-reference.md)** - All available commands
+- **[📊 Monitoring Setup](./dstb-docs/raw/docs/monitoring-setup.md)** - Telegram + Google Sheets
+- **[📈 Backtest Engine](./dstb-docs/raw/docs/backtest-engine.md)** - Understanding strategy backtesting
 
 ## 🚀 Quick Start
+
+Set **Supabase** env vars (see [`.env.example`](./.env.example)): `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Apply SQL migrations under [`supabase/migrations/`](./supabase/migrations/) to your project, then seed the `configs` table (see [`configs/strategies/README.md`](./configs/strategies/README.md)).
 
 ```bash
 # Install dependencies
 npm install
 
-# Test with paper trading (simulated fills)
+# Copy env template
+copy .env.example .env
+
+# Test with paper trading (simulated fills) — upserts config into Supabase
 npm run bot -- start --config configs/bot.example.json --paper
+
+# Long-running server (loads enabled configs from Supabase + Realtime)
+npm run start
 
 # Check status of the running bot
 npm run bot -- status
 
-# Monitor logs
-npm run bot -- logs <bot-id> --follow
-
 # Stop bot
 npm run bot -- stop <bot-id>
 ```
+
+Optional: migrate old SQLite data with `npm run import:sqlite` (see script header in `src/scripts/sqliteToSupabaseImport.ts`).
 
 ## 📁 Project Structure
 
 ```
 dstb-bot/
 ├── src/
-│   ├── core/              # Bot engine (TradingBot, StateManager)
+│   ├── core/              # Bot engine (TradingBot, SupabaseStateStore)
+│   ├── supabase/          # Supabase client + env helpers
 │   ├── strategies/        # Strategy plugins (orb-atr, sma-crossover)
 │   ├── exchange/          # Exchange adapters (bitunix, paper trading)
 │   ├── monitoring/        # Alerts & reporting (Telegram, Sheets)
 │   ├── backtest/          # Deterministic candle-based backtest engine
 │   ├── cli/               # CLI commands
 │   └── utils/             # Helpers
-├── configs/               # Strategy JSON config files
-├── data/
-│   └── bot-state.db       # SQLite database
+├── supabase/migrations/   # Postgres schema (Phase 1 v3)
+├── configs/               # Example JSON; live configs in Supabase
+├── data/                  # Daemon records, optional local files
 ├── logs/                  # Log files
-└── docs/                  # Original documentation mapping
+├── docs/                  # Stub → see dstb-docs/
+└── dstb-docs/             # LLM Wiki (raw/docs = markdown archive, wiki = synthesis)
 ```
 
 ## 📊 Monitoring
@@ -97,7 +106,7 @@ npm run bot -- status
 npm run bot -- backtest --config configs/bot.example.json \
   --start 2024-01-01 \
   --end 2024-12-31 \
-  --output docs/reports/backtest-2024.json
+  --output dstb-docs/raw/docs/reports/backtest-2024.json
 ```
 
 ### Emergency Controls
@@ -120,5 +129,5 @@ npm run bot -- stop --all --force
 
 ## 🆘 Support
 
-- Read documentation in [`/docs`](./docs/README.md) first
-- Review [Deployment Guide](./docs/deployment-guide.md)
+- Read [`dstb-docs/index.md`](./dstb-docs/index.md) and the [doc index](./dstb-docs/raw/docs/README.md) first
+- Review [Deployment Guide](./dstb-docs/raw/docs/deployment-guide.md)
