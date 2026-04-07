@@ -109,25 +109,53 @@ async function startServer(): Promise<void> {
     getHealthJson: async () => {
       const running = botManager?.listRunning().length ?? 0;
       const uptimeSec = Math.floor((Date.now() - startedAtMs) / 1000);
-      const errored = await store.countBotsWithStatus("error");
-      const { data: hbRow } = await store.client
-        .from("bots")
-        .select("last_heartbeat")
-        .order("last_heartbeat", { ascending: false })
-        .limit(1)
-        .maybeSingle();
 
-      const lastHb =
-        hbRow !== null && typeof hbRow === "object" && "last_heartbeat" in hbRow
-          ? (hbRow as { last_heartbeat: string | null }).last_heartbeat
-          : null;
+      /**
+       * Liveness: always answer quickly with 200 so Render health checks do not SIGTERM
+       * the box when Supabase is slow or unreachable. DB fields are best-effort.
+       */
+      const healthDbTimeoutMs = 2500;
+      let errored = 0;
+      let lastHb: string | null = null;
+      let dbReachable = true;
+      try {
+        const fromDb = (async (): Promise<{ errored: number; lastHb: string | null }> => {
+          const errCount = await store.countBotsWithStatus("error");
+          const { data: hbRow } = await store.client
+            .from("bots")
+            .select("last_heartbeat")
+            .order("last_heartbeat", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const last =
+            hbRow !== null && typeof hbRow === "object" && "last_heartbeat" in hbRow
+              ? (hbRow as { last_heartbeat: string | null }).last_heartbeat
+              : null;
+          return { errored: errCount, lastHb: last };
+        })();
+
+        const timedOut = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("health_db_timeout"));
+          }, healthDbTimeoutMs);
+        });
+
+        const row = await Promise.race([fromDb, timedOut]);
+        errored = row.errored;
+        lastHb = row.lastHb;
+      } catch (err: unknown) {
+        dbReachable = false;
+        const msg = err instanceof Error ? err.message : String(err);
+        serverLogger.warn(`Health DB snapshot skipped: ${msg}`, { event: "health_db_skip" });
+      }
 
       return JSON.stringify({
         status: "ok",
         uptimeSeconds: uptimeSec,
         botsRunning: running,
         botsErrored: errored,
-        lastHeartbeat: lastHb
+        lastHeartbeat: lastHb,
+        db: dbReachable ? "ok" : "degraded"
       });
     }
   });
