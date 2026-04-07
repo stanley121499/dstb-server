@@ -119,16 +119,29 @@ export class BitunixWebSocket extends EventEmitter {
     this.clearHeartbeatMonitor();
     this.clearPendingRequests();
 
-    // Step 2: Close socket and remove listeners.
-    if (this.ws !== null) {
-      this.ws.close();
-      this.ws.removeAllListeners();
-    }
-
-    // Step 3: Reset state flags.
+    // Step 2: Tear down the raw socket without triggering an unhandled `error` on `ws`.
+    // Calling `close()` while still CONNECTING makes `ws` emit `error` ("closed before established");
+    // if no listener remains, Node crashes the process.
+    const socket = this.ws;
     this.ws = null;
     this.isConnectedFlag = false;
     this.isAuthenticatedFlag = false;
+
+    if (socket !== null) {
+      socket.removeAllListeners();
+      socket.on("error", () => {
+        /* Intentional teardown — ignore spurious errors from half-open sockets. */
+      });
+      try {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.close();
+        } else if (socket.readyState !== WebSocket.CLOSED) {
+          socket.terminate();
+        }
+      } catch {
+        /* Closing can throw in edge cases; state is already cleared above. */
+      }
+    }
   }
 
   /**
