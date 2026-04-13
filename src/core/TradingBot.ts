@@ -235,10 +235,23 @@ export class TradingBot {
 
   /**
    * Stops the trading bot and disconnects from the exchange.
+   * Updates `bots.status` to "stopped" so the dashboard reflects reality immediately.
    */
   async stop(): Promise<void> {
-    // Step 1: Mark bot as stopped.
+    // Step 1: Mark bot as stopped in memory so the main loop exits.
     this.isRunning = false;
+
+    // Step 2: Persist "stopped" status to the DB before disconnecting so the
+    // dashboard never gets stuck showing "running" after a crash or disable.
+    try {
+      await this.stateManager.updateBotStatus(this.id, "stopped");
+    } catch (err) {
+      this.logger.error("Failed to update bot status to stopped", {
+        event: "bot_stop_status_error",
+        botId: this.id,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
 
     this.persistThought({
       level: "INFO",
@@ -247,7 +260,7 @@ export class TradingBot {
       metadata: {}
     });
 
-    // Step 2: Disconnect exchange.
+    // Step 3: Disconnect exchange.
     await this.exchange.disconnect();
 
     this.logger.info("Trading bot stopped", {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -39,6 +39,25 @@ function pickBot(row: BotGridRow): {
   return b as { id: string; status: string; equity: string | number | null; last_heartbeat: string | null };
 }
 
+/**
+ * Derive the status the UI should display, factoring in:
+ * - config.enabled (disabled config overrides everything)
+ * - heartbeat freshness (running bot with stale heartbeat is "unresponsive")
+ */
+function effectiveStatus(
+  enabled: boolean,
+  botStatus: string | undefined,
+  heartbeatStale: boolean
+): string {
+  if (!enabled) {
+    return "disabled";
+  }
+  if (botStatus === "running" && heartbeatStale) {
+    return "unresponsive";
+  }
+  return botStatus ?? "stopped";
+}
+
 function statusDotClass(status: string): string {
   switch (status) {
     case "running":
@@ -49,6 +68,10 @@ function statusDotClass(status: string): string {
       return "bg-red-500";
     case "paused":
       return "bg-yellow-600";
+    case "unresponsive":
+      return "bg-amber-500";
+    case "disabled":
+      return "bg-muted-foreground/40";
     default:
       return "bg-muted-foreground";
   }
@@ -94,6 +117,8 @@ export function BotGrid(props: Readonly<{
   todayPnlByBotId: Readonly<Record<string, number>>;
 }>): React.ReactElement {
   const router = useRouter();
+  // Tracks which config IDs are awaiting their toggle Supabase call.
+  const [pendingToggles, setPendingToggles] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -112,12 +137,21 @@ export function BotGrid(props: Readonly<{
   }, [router]);
 
   async function setEnabled(configId: string, enabled: boolean): Promise<void> {
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.from("configs").update({ enabled }).eq("id", configId);
-    if (error !== null) {
-      console.error(error.message);
+    setPendingToggles((prev) => new Set([...prev, configId]));
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { error } = await supabase.from("configs").update({ enabled }).eq("id", configId);
+      if (error !== null) {
+        console.error(error.message);
+      }
+      router.refresh();
+    } finally {
+      setPendingToggles((prev) => {
+        const next = new Set(prev);
+        next.delete(configId);
+        return next;
+      });
     }
-    router.refresh();
   }
 
   let running = 0;
@@ -125,7 +159,8 @@ export function BotGrid(props: Readonly<{
   let totalTodayPnl = 0;
   for (const row of props.rows) {
     const bot = pickBot(row);
-    if (bot?.status === "running") {
+    const hbForCount = heartbeatLabel(bot?.last_heartbeat ?? null);
+    if (effectiveStatus(row.enabled, bot?.status, hbForCount.stale) === "running") {
       running += 1;
     }
     if (bot !== null) {
@@ -177,11 +212,11 @@ export function BotGrid(props: Readonly<{
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {props.rows.map((row) => {
           const bot = pickBot(row);
-          const status = bot?.status ?? "stopped";
           const hb = heartbeatLabel(bot?.last_heartbeat ?? null);
+          const status = effectiveStatus(row.enabled, bot?.status, hb.stale);
           const todayPnl = bot !== null ? (props.todayPnlByBotId[bot.id] ?? 0) : 0;
           return (
-            <Card key={row.id} className="flex flex-col">
+            <Card key={row.id} className={cn("flex flex-col", !row.enabled && "opacity-60")}>
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div className="space-y-1">
                   <CardTitle className="text-base font-semibold">
@@ -197,15 +232,24 @@ export function BotGrid(props: Readonly<{
                   <span className={cn("h-2 w-2 rounded-full", statusDotClass(status))} title={status} />
                   <Switch
                     checked={row.enabled}
+                    disabled={pendingToggles.has(row.id)}
                     onCheckedChange={(v) => void setEnabled(row.id, v)}
                     aria-label={`Enable ${row.name}`}
+                    className={pendingToggles.has(row.id) ? "opacity-50" : ""}
                   />
                 </div>
               </CardHeader>
               <CardContent className="mt-auto space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  <span className="capitalize">{status}</span>
+                  <span className={cn(
+                    "capitalize",
+                    status === "unresponsive" && "text-amber-600",
+                    status === "disabled" && "text-muted-foreground",
+                    status === "error" && "text-red-600"
+                  )}>
+                    {status}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Equity</span>
