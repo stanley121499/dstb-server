@@ -14,6 +14,7 @@ export type BarInterval =
   | "60m"
   | "90m"
   | "1h"
+  | "4h"
   | "1d";
 
 /**
@@ -39,6 +40,8 @@ export function intervalToMinutes(interval: string): number {
       return 90;
     case "1h":
       return 60;
+    case "4h":
+      return 240;
     case "1d":
       return 1440;
     default:

@@ -8,6 +8,7 @@ import { runStatus } from "./commands/status";
 import { runStop } from "./commands/stop";
 import { runBehaviorBacktest } from "./commands/behaviorBacktest";
 import { runBehaviorLive } from "./commands/behaviorLive";
+import { runBehaviorBackfillSupabase } from "./commands/behaviorBackfillSupabase";
 import type { CliCommand, ParsedCliArgs } from "./commands/cliTypes";
 import { parseArgv } from "./commands/cliUtils";
 
@@ -19,7 +20,8 @@ const supportedCommands: Readonly<CliCommand[]> = [
   "backtest",
   "reconcile",
   "behavior:backtest",
-  "behavior:live"
+  "behavior:live",
+  "behavior:backfill-supabase"
 ];
 
 const booleanFlags = [
@@ -88,6 +90,9 @@ async function main(): Promise<void> {
     case "behavior:live":
       await runBehaviorLive(parsed);
       return;
+    case "behavior:backfill-supabase":
+      await runBehaviorBackfillSupabase(parsed);
+      return;
     default:
       throw new Error(`Unsupported command "${parsed.command}".`);
   }
@@ -112,6 +117,7 @@ function printHelp(): void {
     "  reconcile   Reconcile state with exchange",
     "  behavior:backtest   Run S2 behavior backtest",
     "  behavior:live       Start S2 behavior live bot",
+    "  behavior:backfill-supabase  Upsert behavior cycles + results to Supabase",
     "",
     "Global Options:",
     "  --help      Show help for command",

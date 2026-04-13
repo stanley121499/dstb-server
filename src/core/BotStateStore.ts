@@ -10,6 +10,17 @@ import type {
 } from "./types.js";
 
 /**
+ * Row payload for structured operational logs (`bot_logs` in Supabase).
+ */
+export type BotLogInsert = Readonly<{
+  botId: string | null;
+  level: string;
+  event: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}>;
+
+/**
  * Persistence contract for trading bot state (Supabase implementation).
  * Mirrors the former SQLite StateManager surface area.
  */
@@ -38,6 +49,7 @@ export interface BotStateStore {
   getAllOpenPositions(): Promise<Position[]>;
   getDailyPnL(botId: string, date: string): Promise<number>;
   backup(): Promise<void>;
+  insertBotLog(args: BotLogInsert): Promise<void>;
 }
 
 /**
@@ -51,6 +63,7 @@ export function isBotStateStore(value: unknown): value is BotStateStore {
   return (
     typeof v["createBot"] === "function" &&
     typeof v["getBot"] === "function" &&
-    typeof v["closePosition"] === "function"
+    typeof v["closePosition"] === "function" &&
+    typeof v["insertBotLog"] === "function"
   );
 }

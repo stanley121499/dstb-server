@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { ExchangeCandle } from "../exchange/types.js";
 import { intervalToMs } from "../utils/interval.js";
-import { strategyParamsSchema } from "../domain/strategyParams.js";
+import { strategyIntervalSchema, strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
 import { InMemoryBotStateStore } from "../core/InMemoryBotStateStore.js";
@@ -178,7 +178,7 @@ async function runBenchmark(
   const adapter = new ReplayExchangeAdapter({
     candles,
     symbol: config.symbol,
-    interval: strategyParamsSchema.shape.interval.parse(config.interval),
+    interval: strategyIntervalSchema.parse(config.interval),
     initialBalance: config.initialBalance,
     feeBps: 0,
     slippageBps: 0

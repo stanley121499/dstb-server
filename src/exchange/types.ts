@@ -220,3 +220,22 @@ export type RateLimitStatus = Readonly<{
  * Candle data used for market data operations.
  */
 export type ExchangeCandle = Candle;
+
+/**
+ * Arguments for fetching OHLCV around a closed trade (dashboard `trade_candles`).
+ */
+export type FetchTradeExitCandlesArgs = Readonly<{
+  symbol: string;
+  entryTimeUtcMs: number;
+  exitTimeUtcMs: number;
+}>;
+
+/**
+ * One timeframe of candles persisted for trade chart context (JSONB-compatible records).
+ */
+export type TradeExitCandleBundle = Readonly<{
+  timeframe: string;
+  candles: ReadonlyArray<Record<string, unknown>>;
+  rangeStartMs: number;
+  rangeEndMs: number;
+}>;

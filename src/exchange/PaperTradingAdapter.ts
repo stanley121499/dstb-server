@@ -5,15 +5,18 @@ import type { Candle, YahooInterval } from "../data/yahooFinance.js";
 import { intervalToMs } from "../utils/interval.js";
 import { ExchangeError } from "./ExchangeError.js";
 import type { IExchangeAdapter } from "./IExchangeAdapter.js";
+import { TRADE_EXIT_CHART_INTERVALS, filterCandlesForTradeWindow } from "./tradeExitChartCandles.js";
 import type {
   Balance,
   ExchangeCandle,
+  FetchTradeExitCandlesArgs,
   Order,
   OrderSide,
   OrderStatus,
   Position,
   RateLimitStatus,
-  Trade
+  Trade,
+  TradeExitCandleBundle
 } from "./types.js";
 
 type MutableOrder = {
@@ -484,6 +487,46 @@ export class PaperTradingAdapter implements IExchangeAdapter {
 
     // Step 3: Return rate limit status.
     return status;
+  }
+
+  /**
+   * Fetches 15m / 1h / 4h candles from Binance for the trade window (`trade_candles` in paper mode).
+   */
+  public async fetchTradeCandleBundlesForRange(
+    args: Readonly<FetchTradeExitCandlesArgs>
+  ): Promise<readonly TradeExitCandleBundle[]> {
+    this.assertConnected();
+    const sym = args.symbol.trim().length > 0 ? args.symbol : this.symbol;
+    const lo = Math.min(args.entryTimeUtcMs, args.exitTimeUtcMs);
+    const hi = Math.max(args.entryTimeUtcMs, args.exitTimeUtcMs);
+    const bundles: TradeExitCandleBundle[] = [];
+    for (const tf of TRADE_EXIT_CHART_INTERVALS) {
+      let intervalMs: number;
+      try {
+        intervalMs = intervalToMs(tf);
+      } catch {
+        intervalMs = 60 * 60_000;
+      }
+      const padMs = 20 * intervalMs;
+      const startTimeUtc = new Date(lo - padMs).toISOString();
+      const endTimeUtc = new Date(hi + padMs).toISOString();
+      try {
+        this.trackRateLimitOrThrow();
+        const result = await fetchBinanceCandles({
+          symbol: sym,
+          interval: tf,
+          startTimeUtc,
+          endTimeUtc
+        });
+        const bundle = filterCandlesForTradeWindow(result.candles, args.entryTimeUtcMs, args.exitTimeUtcMs, tf);
+        if (bundle !== null) {
+          bundles.push(bundle);
+        }
+      } catch {
+        // Omit this timeframe; closing the trade must not depend on chart data.
+      }
+    }
+    return bundles;
   }
 
   /**

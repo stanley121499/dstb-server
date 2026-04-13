@@ -2,7 +2,7 @@
 title: "Source summary — Phase Rollout Plan v3"
 type: source-summary
 updated: 2026-04-07
-sources: 1
+sources: 4
 tags: [dstb, planning, supabase, dashboard]
 ---
 
@@ -28,9 +28,12 @@ Six-phase roadmap from **Supabase + bot server migration** through **dashboard**
 
 ## Relation to current codebase
 
-**Contrast:** Today the repo is **CLI-first, SQLite, `configs/strategies/*.json`** per [[../overview|wiki overview]] and `raw/docs/`. This plan **supersedes** that operational model once executed; until then it is **planning only**.
+The **phase plan text** remains the north star. **Implementation progress (2026-04-07):** Phases **1–3** are largely **shipped** in the main path (Supabase + bot server + dashboard Phase 2 scope + **trade detail / analytics / compare** per [[phase3-implementation-summary|Phase 3 implementation summary]]). **Phases 4–6** (behavior-in-DB, ruleset editor, environment pipeline) remain **planned**. Legacy **`raw/docs/`** still describes SQLite-first CLI in places; use [[../synthesis/v3-planning-document-set|synthesis]] + [[../concepts/supabase-v3-migration|migration concept]] for the hybrid picture.
+
+**Ops fix:** [[bot-heartbeat-vs-candle-interval|Heartbeat vs candle interval]] — `last_heartbeat` now updates on ~30s cadence during long-interval strategies.
 
 ## Cross-references
 
 - Raw: [`2026-04-07-architecture-plan-v3.md`](../../raw/2026-04-07-architecture-plan-v3.md), [`2026-04-07-schema-design-v3.md`](../../raw/2026-04-07-schema-design-v3.md), [`2026-04-07-behavior-system-design.md`](../../raw/2026-04-07-behavior-system-design.md), [`2026-04-07-dashboard-spec.md`](../../raw/2026-04-07-dashboard-spec.md)
 - [[../synthesis/v3-planning-document-set|v3 planning document set (synthesis)]]
+- [[e2e-testing-v3-backlog|E2E testing backlog]] (not in original phase doc)

@@ -9,6 +9,7 @@ import type { TelegramAlerter } from "../../monitoring/TelegramAlerter.js";
 import type { Logger } from "../../core/Logger.js";
 import type { ExchangeCandle } from "../../exchange/types.js";
 import { ExchangeError } from "../../exchange/ExchangeError.js";
+import type { BehaviorSupabaseSync } from "../supabase/behaviorSupabaseSync.js";
 
 type CycleState = {
   cycleStartUtcMs: number;
@@ -31,6 +32,8 @@ export type BehaviorBotOptions = Readonly<{
   pair: string;
   startUid: number;          // from env BEHAVIOR_START_UID, default 1
   logger: Logger;
+  /** When set, each finalized cycle is upserted to Supabase (behavior_raw_cycles + behavior_results). */
+  supabaseSync: BehaviorSupabaseSync | null;
 }>;
 
 export class BehaviorBot {
@@ -218,16 +221,15 @@ export class BehaviorBot {
 
   private async finalizeLifecycle(state: CycleState): Promise<void> {
     const analyzer = new BehaviorAnalyzer();
-    const row = analyzer.analyze(this.buildInput(state));
+    const input = this.buildInput(state);
+    const row = analyzer.analyze(input);
 
     try {
       await this.options.sheetsReporter.appendRow(row);
       this.options.logger.info("Lifecycle finalized and row appended", { date: row.date, pair: this.options.pair });
 
-      // Accumulate completed row for dashboard aggregation
       this.allCompletedRows.push(row);
 
-      // Refresh the BEHAVIOR-OVERVIEW-DASHBOARD tab with the updated full history
       if (this.options.dashboardReporter !== null) {
         await this.options.dashboardReporter.write(this.allCompletedRows);
         this.options.logger.info("Dashboard tab refreshed", { totalRows: this.allCompletedRows.length });
@@ -246,6 +248,17 @@ export class BehaviorBot {
       }
     } catch (err) {
       this.options.logger.error("Failed to append row", { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    if (this.options.supabaseSync !== null) {
+      try {
+        await this.options.supabaseSync.syncCycleFromDailyInput(this.options.pair, input);
+        this.options.logger.info("Supabase behavior cycle synced", { pair: this.options.pair });
+      } catch (err) {
+        this.options.logger.error("Supabase behavior sync failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

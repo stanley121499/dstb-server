@@ -6,17 +6,24 @@ import { Logger } from "../core/Logger.js";
 import { GoogleSheetsReporter } from "../monitoring/GoogleSheetsReporter.js";
 import { TelegramAlerter } from "../monitoring/TelegramAlerter.js";
 import { BotManager } from "./BotManager.js";
+import { tryHandleBehaviorApi } from "./behaviorHttpHandlers.js";
+import { startEquityDropAlertLoop } from "./equityAlertJob.js";
+import type { SupabaseStateStore } from "../core/SupabaseStateStore.js";
 
 const startedAtMs = Date.now();
 
 /**
- * HTTP GET /health for Render and UptimeRobot.
+ * HTTP GET /health plus Phase 5–6 POST /behavior/* (when BEHAVIOR_API_SECRET is set).
  */
-function startHealthServer(args: Readonly<{
+function startHttpServer(args: Readonly<{
   port: number;
   getHealthJson: () => Promise<string>;
   logger: Logger;
+  store: SupabaseStateStore;
 }>): http.Server {
+  const behaviorApiSecret =
+    typeof process.env["BEHAVIOR_API_SECRET"] === "string" ? process.env["BEHAVIOR_API_SECRET"].trim() : "";
+
   const server = http.createServer((req, res) => {
     if (req.url === "/health" && req.method === "GET") {
       void (async () => {
@@ -31,12 +38,23 @@ function startHealthServer(args: Readonly<{
       })();
       return;
     }
-    res.writeHead(404);
-    res.end();
+
+    void (async () => {
+      const handled = await tryHandleBehaviorApi(req, res, {
+        store: args.store,
+        logger: args.logger,
+        behaviorApiSecret,
+      });
+      if (handled) {
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    })();
   });
 
   server.listen(args.port, () => {
-    args.logger.info(`Health server listening on port ${String(args.port)}`, { event: "health_listen" });
+    args.logger.info(`HTTP server listening on port ${String(args.port)}`, { event: "health_listen" });
   });
 
   return server;
@@ -58,6 +76,7 @@ async function startServer(): Promise<void> {
   let telegram: TelegramAlerter | null = null;
   let sheets: GoogleSheetsReporter | null = null;
   let botManager: BotManager | null = null;
+  let equityAlertHandle: ReturnType<typeof setInterval> | null = null;
 
   const portRaw = process.env["PORT"];
   const port =
@@ -103,9 +122,10 @@ async function startServer(): Promise<void> {
 
   botManager.subscribeConfigRealtime();
 
-  const healthServer = startHealthServer({
+  const healthServer = startHttpServer({
     port: healthPort,
     logger: serverLogger,
+    store,
     getHealthJson: async () => {
       const running = botManager?.listRunning().length ?? 0;
       const uptimeSec = Math.floor((Date.now() - startedAtMs) / 1000);
@@ -162,6 +182,10 @@ async function startServer(): Promise<void> {
 
   const handleSignal = async (signal: string): Promise<void> => {
     serverLogger.info(`Shutdown signal ${signal} received`, { event: "server_shutdown", signal });
+    if (equityAlertHandle !== null) {
+      clearInterval(equityAlertHandle);
+      equityAlertHandle = null;
+    }
     telegram?.stopPolling();
     sheets?.stop();
     healthServer.close();
@@ -182,6 +206,14 @@ async function startServer(): Promise<void> {
   sheets?.start();
 
   await botManager.startAll();
+
+  if (telegram !== null) {
+    equityAlertHandle = startEquityDropAlertLoop({
+      store,
+      logger: serverLogger,
+      telegram
+    });
+  }
 
   if (telegram !== null) {
     const names = await botManager.listAvailableConfigNames();

@@ -8,6 +8,9 @@ import { BehaviorBot } from "../../behavior/bot/BehaviorBot.js";
 import { Logger } from "../../core/Logger.js";
 import { readJsonFile, resolveProjectRoot, createStateManager } from "./cliUtils.js";
 import type { ParsedCliArgs } from "./cliTypes.js";
+import { createServiceRoleClient } from "../../supabase/client.js";
+import { loadSupabaseEnv } from "../../supabase/env.js";
+import { BehaviorSupabaseSync } from "../../behavior/supabase/behaviorSupabaseSync.js";
 
 function getEnvOrThrow(key: string): string {
   const val = process.env[key];
@@ -26,10 +29,14 @@ export async function runBehaviorLive(args: ParsedCliArgs): Promise<void> {
     throw new Error(`Config file not found at: ${absolutePath}`);
   }
 
-  const rawConfig = readJsonFile(configPath) as any;
-  const apiKey = rawConfig.exchangeApiKey ?? process.env.BITUNIX_API_KEY;
-  const secretKey = rawConfig.exchangeApiSecret ?? process.env.BITUNIX_API_SECRET;
-  const symbol = rawConfig.symbol ?? "BTC-USD";
+  const rawConfig = readJsonFile(configPath) as Record<string, unknown>;
+  const apiKey =
+    (typeof rawConfig["exchangeApiKey"] === "string" ? rawConfig["exchangeApiKey"] : undefined) ??
+    process.env.BITUNIX_API_KEY;
+  const secretKey =
+    (typeof rawConfig["exchangeApiSecret"] === "string" ? rawConfig["exchangeApiSecret"] : undefined) ??
+    process.env.BITUNIX_API_SECRET;
+  const symbol = typeof rawConfig["symbol"] === "string" ? rawConfig["symbol"] : "BTC-USD";
 
   if (!apiKey || !secretKey) {
     throw new Error("Missing Bitunix credentials in config or environment");
@@ -65,6 +72,22 @@ export async function runBehaviorLive(args: ParsedCliArgs): Promise<void> {
 
   const startUid = parseInt(process.env.BEHAVIOR_START_UID ?? "1", 10);
 
+  let supabaseSync: BehaviorSupabaseSync | null = null;
+  try {
+    const url = process.env.SUPABASE_URL;
+    const sr = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (typeof url === "string" && url.trim().length > 0 && typeof sr === "string" && sr.trim().length > 0) {
+      const env = loadSupabaseEnv();
+      const client = createServiceRoleClient(env);
+      supabaseSync = new BehaviorSupabaseSync(client, logger);
+      logger.info("Supabase behavior sync enabled");
+    }
+  } catch (err) {
+    logger.info("Supabase behavior sync disabled", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // 6. Fetch initial PDH/PDL (demonstration/warmup as per prompt, actual value used inside BehaviorBot.start)
   const klines = await marketApi.getKline({ symbol: "BTCUSDT", interval: "1d", limit: 2 });
   const prevCandle = klines[klines.length - 2];
@@ -80,7 +103,8 @@ export async function runBehaviorLive(args: ParsedCliArgs): Promise<void> {
     dashboardReporter,
     pair: symbol,
     startUid,
-    logger
+    logger,
+    supabaseSync,
   });
 
   await bot.start();

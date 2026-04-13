@@ -4,7 +4,7 @@ import type { Order as ExchangeOrder, OrderSide } from "../exchange/types.js";
 import { Logger } from "./Logger";
 import type { BotStateStore } from "./BotStateStore.js";
 import { isBotStateStore } from "./BotStateStore.js";
-import type { Order, OrderStatus, Position, PositionSide } from "./types";
+import type { Order, OrderStatus, Position, PositionSide, TradeCandleBundle } from "./types";
 import type { Signal } from "../strategies/IStrategy";
 
 /**
@@ -214,9 +214,34 @@ export class OrderExecutor {
       this.toCoreOrder(args.botId, args.position.symbol, args.position.side === "LONG" ? "long" : "short", finalizedOrder)
     );
 
-    // Step 5: Close the DB position using the fill price.
+    // Step 5: Optional multi-timeframe klines for dashboard trade charts (`trade_candles`).
     const exitPrice = this.getFillPrice(finalizedOrder, args.marketPrice);
-    await this.stateManager.closePosition(args.position.id, exitPrice, args.reason);
+    const exitTimeUtcMs = Date.now();
+    let tradeCandles: ReadonlyArray<TradeCandleBundle> | undefined;
+    const fetchBundles = this.exchange.fetchTradeCandleBundlesForRange;
+    if (typeof fetchBundles === "function") {
+      try {
+        const raw = await fetchBundles.call(this.exchange, {
+          symbol: args.position.symbol,
+          entryTimeUtcMs: args.position.entryTime,
+          exitTimeUtcMs: exitTimeUtcMs
+        });
+        if (raw.length > 0) {
+          tradeCandles = raw;
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn("Failed to fetch trade chart candles; closing without trade_candles", {
+          event: "trade_exit_candles_failed",
+          botId: args.botId,
+          positionId: args.position.id,
+          message
+        });
+      }
+    }
+
+    // Step 6: Close the DB position using the fill price.
+    await this.stateManager.closePosition(args.position.id, exitPrice, args.reason, tradeCandles);
 
     return { exchangeOrder: finalizedOrder, exitPrice };
   }

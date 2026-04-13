@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { BotStateStore } from "./BotStateStore.js";
+import type { BotLogInsert, BotStateStore } from "./BotStateStore.js";
 import type {
   Bot,
   BotConfig,
@@ -203,6 +203,10 @@ export class InMemoryBotStateStore implements BotStateStore {
 
   public async backup(): Promise<void> {
     /* no-op */
+  }
+
+  public async insertBotLog(_args: BotLogInsert): Promise<void> {
+    /* no-op — tests and offline runs do not persist to Postgres */
   }
 
   private getDateRangeMs(date: string): { start: number; end: number } | null {

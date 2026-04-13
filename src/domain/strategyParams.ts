@@ -1,19 +1,30 @@
-import { z } from "zod";
+﻿import { z } from "zod";
+
+const executionBlockSchema = z
+  .object({
+    feeBps: z.number().int().min(0),
+    slippageBps: z.number().int().min(0)
+  })
+  .strict();
 
 /**
- * Strategy parameter payload schema (authoritative) from `dstb-docs/raw/docs/strategy-orb-atr.md`.
- *
- * Notes:
- * - This schema is used for request validation and for validating JSONB rows
- *   fetched from Supabase.
- * - It is strict to prevent drift between UI/API/engine.
+ * Allowed candle intervals for ORB-ATR (config row + merged backtest payload).
  */
-export const strategyParamsSchema = z
+export const strategyIntervalSchema = z.enum(["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]);
+
+/**
+ * Allowed symbols for ORB-ATR (merged backtest payload).
+ */
+export const strategySymbolSchema = z.enum(["BTC-USD", "ETH-USD", "ZEC-USD"]);
+
+/**
+ * ORB-ATR `configs.params` JSON only (no symbol/interval — those live on the config row).
+ * Matches fields persisted in Supabase and `src/strategies/orb-atr.ts` `orbParamsSchema`.
+ */
+export const orbAtrParamsBodySchema = z
   .object({
     version: z.literal("1.0"),
-    symbol: z.enum(["BTC-USD", "ETH-USD", "ZEC-USD"]),
-    interval: z.enum(["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d"]),
-
+    intervalMinutes: z.number().int().min(1).optional(),
     session: z
       .object({
         timezone: z.literal("America/New_York"),
@@ -21,7 +32,6 @@ export const strategyParamsSchema = z
         openingRangeMinutes: z.number().int().min(1)
       })
       .strict(),
-
     entry: z
       .object({
         directionMode: z.union([
@@ -34,7 +44,6 @@ export const strategyParamsSchema = z
         maxTradesPerSession: z.number().int().min(1)
       })
       .strict(),
-
     atr: z
       .object({
         atrLength: z.number().int().min(1),
@@ -56,32 +65,21 @@ export const strategyParamsSchema = z
           });
         }
       }),
-
     risk: z
       .object({
         sizingMode: z.union([z.literal("fixed_notional"), z.literal("fixed_risk_pct")]),
         riskPctPerTrade: z.number().min(0).max(100),
-        /**
-         * Fixed notional per trade (used when sizingMode === "fixed_notional").
-         *
-         * Note: strategy-orb-atr.md mentions fixed_notional sizing but does not specify a field name.
-         * The Phase 1 UI uses `risk.fixedNotional`, so the API accepts and validates it.
-         */
         fixedNotional: z.number().min(0).optional().default(0),
-
         stopMode: z.union([
           z.literal("or_opposite"),
           z.literal("or_midpoint"),
           z.literal("atr_multiple")
         ]),
         atrStopMultiple: z.number().positive(),
-
         takeProfitMode: z.union([z.literal("disabled"), z.literal("r_multiple")]),
         tpRMultiple: z.number().positive(),
-
         trailingStopMode: z.union([z.literal("disabled"), z.literal("atr_trailing")]),
         atrTrailMultiple: z.number().positive(),
-
         timeExitMode: z.union([
           z.literal("disabled"),
           z.literal("bars_after_entry"),
@@ -101,7 +99,6 @@ export const strategyParamsSchema = z
             message: "riskPctPerTrade must be > 0 and <= 100 when sizingMode is fixed_risk_pct"
           });
         }
-
         if (v.sizingMode === "fixed_notional" && v.fixedNotional <= 0) {
           ctx.addIssue({
             code: "custom",
@@ -110,22 +107,26 @@ export const strategyParamsSchema = z
           });
         }
       }),
-
-    execution: z
-      .object({
-        feeBps: z.number().int().min(0),
-        slippageBps: z.number().int().min(0)
-      })
-      .strict()
+    execution: executionBlockSchema.optional()
   })
-  .strict()
-  // Note: Any cross-field invariants should be enforced via `.superRefine()`.
-  // This schema currently enforces invariants in nested refinements above.
-  ;
+  .strict();
 
-export type StrategyParams = z.infer<typeof strategyParamsSchema>;
+const symbolIntervalSchema = z.object({
+  symbol: strategySymbolSchema,
+  interval: strategyIntervalSchema
+});
 
+/**
+ * Full ORB-ATR params after merging config.symbol / config.interval (CLI backtests, paper validation).
+ * Default execution fees when omitted.
+ */
+export const strategyParamsSchema = orbAtrParamsBodySchema
+  .merge(symbolIntervalSchema)
+  .transform((row) => ({
+    ...row,
+    execution: row.execution ?? { feeBps: 0, slippageBps: 0 }
+  }));
 
+export type StrategyParams = z.output<typeof strategyParamsSchema>;
 
-
-
+export type OrbAtrParamsBody = z.infer<typeof orbAtrParamsBodySchema>;

@@ -1,10 +1,7 @@
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { strategyParamsSchema } from "../../domain/strategyParams.js";
-import { fetchYahooCandles } from "../../data/yahooFinance.js";
-import { runBacktest as runBacktestEngine } from "../../backtest/runBacktest.js";
+import { runBacktestWithYahoo } from "../../backtest/runBacktestWithYahoo.js";
 import type { ParsedCliArgs } from "./cliTypes";
 import { assertNonEmptyString, isRecord, readJsonFile } from "./cliUtils";
 
@@ -28,39 +25,31 @@ export async function runBacktest(args: ParsedCliArgs): Promise<void> {
   const outputPath = args.flags["output"];
   const config = loadConfig(configPath);
 
-  const paramsPayload = buildParamsPayload(config);
-  const params = strategyParamsSchema.parse(paramsPayload);
-
-  // Step 3: Validate time range.
   const startIso = toIsoString(start);
   const endIso = toIsoString(end);
-  if (Date.parse(startIso) >= Date.parse(endIso)) {
-    throw new Error("start must be before end.");
+
+  const bt = await runBacktestWithYahoo({
+    strategy: config.strategy,
+    symbol: config.symbol,
+    interval: config.interval,
+    initialBalance: config.initialBalance,
+    paramsBody: config.params,
+    startDate: startIso.slice(0, 10),
+    endDate: endIso.slice(0, 10)
+  });
+
+  if (!bt.ok) {
+    throw new Error(bt.error);
   }
 
-  // Step 4: Fetch candles and run backtest.
-  const candleResult = await fetchYahooCandles({
-    symbol: params.symbol,
-    interval: params.interval,
-    startTimeUtc: startIso,
-    endTimeUtc: endIso
-  });
-
-  const result = runBacktestEngine({
-    runId: randomUUID(),
-    candles: candleResult.candles,
-    candlesSorted: true,
-    params,
-    startTimeUtc: startIso,
-    endTimeUtc: endIso,
-    initialEquity: config.initialBalance
-  });
+  const { result } = bt;
+  const candleResult = { warnings: bt.candleWarnings };
 
   // Step 5: Print summary results and warnings.
   const lines = [
     "Running backtest...",
-    `  Symbol: ${params.symbol}`,
-    `  Interval: ${params.interval}`,
+    `  Symbol: ${config.symbol}`,
+    `  Interval: ${config.interval}`,
     `  Period: ${startIso} to ${endIso}`,
     `  Initial Equity: ${config.initialBalance}`,
     "",
@@ -94,7 +83,7 @@ export async function runBacktest(args: ParsedCliArgs): Promise<void> {
   if (outputPath !== undefined) {
     const payload = {
       config,
-      params,
+      params: { ...config.params, symbol: config.symbol, interval: config.interval },
       metrics: result.metrics,
       trades: result.trades,
       equity: result.equityPoints,
@@ -158,18 +147,6 @@ function loadConfig(pathValue: string): Readonly<{
     initialBalance,
     riskManagement: risk,
     params
-  };
-}
-
-/**
- * Build a strategy params payload by merging config params with symbol/interval.
- */
-function buildParamsPayload(config: Readonly<{ symbol: string; interval: string; params: Record<string, unknown> }>): Record<string, unknown> {
-  // Step 1: Merge params with required top-level fields.
-  return {
-    ...config.params,
-    symbol: config.symbol,
-    interval: config.interval
   };
 }
 

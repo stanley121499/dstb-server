@@ -2,7 +2,7 @@
 title: "Entity — DSTB trading bot (product)"
 type: entity
 updated: 2026-04-07
-sources: 1
+sources: 3
 tags: [dstb, product]
 ---
 
@@ -12,7 +12,7 @@ tags: [dstb, product]
 
 ## Purpose
 
-Algorithmic crypto trading via a **stable CLI**: multiple strategies as plugins, live or paper execution, persistent SQLite state, backtesting, and operational monitoring.
+Algorithmic crypto trading: multiple strategies as plugins, live or paper execution, backtesting, and monitoring. **Production-style** control uses **Supabase** + **`npm run start`** server; **[[dstb-dashboard|dashboard]]** for grid/config/trades. CLI and SQLite paths may still exist locally; see [[../concepts/supabase-v3-migration|migration concept]].
 
 ## Key subsystems (for future wiki expansion)
 
@@ -21,6 +21,7 @@ Algorithmic crypto trading via a **stable CLI**: multiple strategies as plugins,
 - **Strategies:** `src/strategies/` — plugin implementations
 - **Backtest:** `src/backtest/`
 - **CLI:** `src/cli/`
+- **Server:** `src/server/` — BotManager, health, Realtime (with Supabase)
 - **Monitoring:** `src/monitoring/`
 
 ## Sources
@@ -31,4 +32,5 @@ Algorithmic crypto trading via a **stable CLI**: multiple strategies as plugins,
 ## See also
 
 - [[../overview|Wiki overview]]
+- [[dstb-dashboard|DSTB dashboard]]
 - [[../sources/raw-docs-readme|Source summary: doc README]]

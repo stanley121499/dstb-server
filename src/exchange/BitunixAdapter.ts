@@ -19,15 +19,18 @@ import {
   isRecord,
   parseKlineEventData
 } from "./BitunixParsers.js";
+import { TRADE_EXIT_CHART_INTERVALS, filterCandlesForTradeWindow } from "./tradeExitChartCandles.js";
 import type {
   Balance,
   CircuitBreakerSnapshot,
   ExchangeCandle,
+  FetchTradeExitCandlesArgs,
   Order,
   OrderSide,
   Position,
   RateLimitStatus,
-  Trade
+  Trade,
+  TradeExitCandleBundle
 } from "./types.js";
 import type {
   OrderBook,
@@ -215,6 +218,25 @@ export class BitunixAdapter implements IExchangeAdapter {
     const latest = candles.at(-1);
     if (latest !== undefined) this.lastPrice = latest.close;
     return limit === undefined ? candles : candles.slice(-limit);
+  }
+
+  /**
+   * Fetches 15m / 1h / 4h klines (last 200 bars each) and trims to the trade window for `trade_candles`.
+   */
+  public async fetchTradeCandleBundlesForRange(
+    args: Readonly<FetchTradeExitCandlesArgs>
+  ): Promise<readonly TradeExitCandleBundle[]> {
+    this.assertConnected();
+    const sym = args.symbol.trim().length > 0 ? args.symbol : this.symbol;
+    const bundles: TradeExitCandleBundle[] = [];
+    for (const tf of TRADE_EXIT_CHART_INTERVALS) {
+      const raw = await this.market.getKline({ symbol: sym, interval: tf, limit: 200 });
+      const bundle = filterCandlesForTradeWindow(raw, args.entryTimeUtcMs, args.exitTimeUtcMs, tf);
+      if (bundle !== null) {
+        bundles.push(bundle);
+      }
+    }
+    return bundles;
   }
 
   public async subscribeToCandles(args: Readonly<{

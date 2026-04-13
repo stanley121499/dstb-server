@@ -6,7 +6,7 @@ import { createServiceRoleClient } from "../supabase/client.js";
 import { loadSupabaseEnv } from "../supabase/env.js";
 import { botConfigToColumns, configRowToBotConfig, type ConfigRow } from "./configMapping.js";
 import { Logger } from "./Logger.js";
-import type { BotStateStore } from "./BotStateStore.js";
+import type { BotLogInsert, BotStateStore } from "./BotStateStore.js";
 import type {
   Bot,
   BotConfig,
@@ -167,13 +167,7 @@ export class SupabaseStateStore implements BotStateStore {
   /**
    * Structured operational log (bot_logs).
    */
-  public async insertBotLog(args: Readonly<{
-    botId: string | null;
-    level: string;
-    event: string;
-    message: string;
-    metadata?: Record<string, unknown>;
-  }>): Promise<void> {
+  public async insertBotLog(args: BotLogInsert): Promise<void> {
     const { error } = await this.client.from("bot_logs").insert({
       bot_id: args.botId,
       level: args.level,

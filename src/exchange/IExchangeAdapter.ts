@@ -1,5 +1,14 @@
 import type { ExchangeError } from "./ExchangeError.js";
-import type { Balance, ExchangeCandle, Order, OrderSide, Position, RateLimitStatus } from "./types.js";
+import type {
+  Balance,
+  ExchangeCandle,
+  FetchTradeExitCandlesArgs,
+  Order,
+  OrderSide,
+  Position,
+  RateLimitStatus,
+  TradeExitCandleBundle
+} from "./types.js";
 
 /**
  * Exchange adapter interface implemented by all exchange integrations.
@@ -87,4 +96,11 @@ export interface IExchangeAdapter {
    * Retrieves the adapter's current rate limit status.
    */
   getRateLimitStatus(): Promise<RateLimitStatus>;
+
+  /**
+   * When implemented, fetches multi-timeframe klines around a trade window for `trade_candles` persistence.
+   */
+  fetchTradeCandleBundlesForRange?(
+    args: Readonly<FetchTradeExitCandlesArgs>
+  ): Promise<readonly TradeExitCandleBundle[]>;
 }

@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Candle } from "../data/yahooFinance.js";
 import { fetchBinanceCandles } from "../data/binanceDataSource.js";
 import { runBacktest } from "../backtest/runBacktest.js";
-import { strategyParamsSchema } from "../domain/strategyParams.js";
+import { strategyIntervalSchema, strategyParamsSchema } from "../domain/strategyParams.js";
 import { ConfigLoader } from "../core/ConfigLoader";
 import { Logger } from "../core/Logger";
 import { InMemoryBotStateStore } from "../core/InMemoryBotStateStore.js";
@@ -167,7 +167,7 @@ async function runPaperReplay(
   const adapter = new ReplayExchangeAdapter({
     candles,
     symbol: config.symbol,
-    interval: strategyParamsSchema.shape.interval.parse(config.interval),
+    interval: strategyIntervalSchema.parse(config.interval),
     initialBalance: config.initialBalance,
     feeBps: execution.feeBps,
     slippageBps: execution.slippageBps
@@ -209,7 +209,7 @@ function writeReport(report: ComparisonReport, outputDir: string): void {
     `Config: ${report.configPath}`,
     `Symbol: ${report.symbol}`,
     `Interval: ${report.interval}`,
-    `Window: ${report.startTimeUtc} → ${report.endTimeUtc}`,
+    `Window: ${report.startTimeUtc} â†’ ${report.endTimeUtc}`,
     "",
     "## Backtest",
     `Total Return: ${report.backtest.totalReturnPct.toFixed(2)}%`,
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
   // Step 2: Fetch candles for the validation window.
   const candleResult = await fetchBinanceCandles({
     symbol: config.symbol,
-    interval: strategyParamsSchema.shape.interval.parse(config.interval),
+    interval: strategyIntervalSchema.parse(config.interval),
     startTimeUtc: args.startTimeUtc,
     endTimeUtc: args.endTimeUtc
   });

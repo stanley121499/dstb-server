@@ -35,6 +35,8 @@ export class BotManager {
   private readonly logger: Logger;
   private readonly alerting?: AlertingAdapter;
   private readonly bots: Map<string, ManagedBot> = new Map();
+  /** Counts consecutive crash restarts per bot (reset after a successful auto-restart). */
+  private readonly crashRestartByBot: Map<string, number> = new Map();
   private readonly debounceMs = 400;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private realtimeChannel: ReturnType<SupabaseStateStore["client"]["channel"]> | null = null;
@@ -186,12 +188,73 @@ export class BotManager {
           event: "server_bot_crashed",
           botId
         });
+        this.scheduleAutoRestartAfterCrash({ botId, configId });
       })
       .finally(() => {
         this.bots.delete(botId);
       });
 
     return botId;
+  }
+
+  /**
+   * When `BOT_AUTO_RESTART=true`, restarts a crashed bot with exponential backoff up to `BOT_AUTO_RESTART_MAX` attempts.
+   */
+  private scheduleAutoRestartAfterCrash(args: Readonly<{ botId: string; configId: string }>): void {
+    const flag = process.env["BOT_AUTO_RESTART"];
+    if (flag !== "1" && flag !== "true") {
+      return;
+    }
+    const maxRaw = process.env["BOT_AUTO_RESTART_MAX"] ?? "3";
+    const maxAttempts = Math.max(0, parseInt(maxRaw, 10) || 0);
+    if (maxAttempts === 0) {
+      return;
+    }
+    const prev = this.crashRestartByBot.get(args.botId) ?? 0;
+    const next = prev + 1;
+    if (next > maxAttempts) {
+      this.logger.warn(`Bot ${args.botId} exceeded auto-restart limit (${String(maxAttempts)})`, {
+        event: "bot_auto_restart_exhausted",
+        botId: args.botId
+      });
+      return;
+    }
+    this.crashRestartByBot.set(args.botId, next);
+    const delayMs = Math.min(120_000, 2000 * 2 ** (next - 1));
+    this.logger.info(`Scheduling bot auto-restart in ${String(delayMs)}ms (attempt ${String(next)})`, {
+      event: "bot_auto_restart_scheduled",
+      botId: args.botId,
+      configId: args.configId
+    });
+    setTimeout(() => {
+      void this.attemptRestartAfterCrash(args);
+    }, delayMs);
+  }
+
+  private async attemptRestartAfterCrash(args: Readonly<{ botId: string; configId: string }>): Promise<void> {
+    if (this.bots.has(args.botId)) {
+      return;
+    }
+    const { data: row, error } = await this.store.client.from("configs").select("*").eq("id", args.configId).maybeSingle();
+    if (error !== null || row === null) {
+      return;
+    }
+    const cfgRow = row as ConfigRow;
+    if (!cfgRow.enabled) {
+      this.crashRestartByBot.delete(args.botId);
+      return;
+    }
+    try {
+      await this.startBotForConfigRow(cfgRow);
+      this.logger.info(`Bot ${args.botId} auto-restarted after crash`, { event: "bot_auto_restart_ok", botId: args.botId });
+      this.crashRestartByBot.delete(args.botId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Auto-restart failed for ${args.botId}: ${msg}`, {
+        event: "bot_auto_restart_failed",
+        botId: args.botId
+      });
+    }
   }
 
   /**

@@ -56,6 +56,10 @@ export class TradingBot {
   private errorCount = 0;
   private lastHeartbeatAt: number | null = null;
   private lastCandleTime: number | null = null;
+  /** Throttle identical HOLD reasons in `bot_logs` while still capturing state changes. */
+  private lastHoldLogAtMs = 0;
+  private lastHoldReasonForLog: string | null = null;
+  private static readonly HOLD_LOG_THROTTLE_MS = 300_000;
 
   /**
    * Creates a new TradingBot instance.
@@ -109,6 +113,48 @@ export class TradingBot {
     this.positionManager = new PositionManager(this.stateManager, this.logger);
     this.orderExecutor = new OrderExecutor(this.exchange, this.stateManager, this.logger);
     this.riskManager = new RiskManager(this.stateManager, this.logger);
+  }
+
+  /**
+   * Persists a structured decision or outcome row to `bot_logs` (non-blocking).
+   */
+  private persistThought(args: Readonly<{
+    level: "DEBUG" | "INFO" | "WARN" | "ERROR" | "CRITICAL";
+    event: string;
+    message: string;
+    metadata?: Record<string, unknown>;
+  }>): void {
+    if (!this.isNonEmptyString(this.id)) {
+      return;
+    }
+    void this.stateManager
+      .insertBotLog({
+        botId: this.id,
+        level: args.level,
+        event: args.event,
+        message: args.message,
+        metadata: args.metadata ?? {}
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.debug(`insertBotLog failed: ${msg}`, { event: "bot_log_insert_failed" });
+      });
+  }
+
+  /**
+   * Compact JSON snapshot of strategy internal state for `bot_logs` (length-capped).
+   */
+  private summarizeStrategyStateForLog(): Record<string, unknown> {
+    try {
+      const s = this.strategy.getState();
+      const json = JSON.stringify(s);
+      const cap = 2000;
+      return {
+        strategyStateJson: json.length > cap ? `${json.slice(0, cap)}…` : json
+      };
+    } catch {
+      return { strategyStateJson: "(unserializable)" };
+    }
   }
 
   /**
@@ -170,6 +216,18 @@ export class TradingBot {
       });
     }
 
+    this.persistThought({
+      level: "INFO",
+      event: "bot_session_start",
+      message: `Session started: ${this.config.name}`,
+      metadata: {
+        symbol: this.config.symbol,
+        strategy: this.strategy.name,
+        exchange: this.config.exchange,
+        interval: this.config.interval
+      }
+    });
+
     // Step 7: Start main loop.
     await this.mainLoop();
 
@@ -181,6 +239,13 @@ export class TradingBot {
   async stop(): Promise<void> {
     // Step 1: Mark bot as stopped.
     this.isRunning = false;
+
+    this.persistThought({
+      level: "INFO",
+      event: "bot_session_stop",
+      message: "Trading bot stopping (disconnecting exchange)",
+      metadata: {}
+    });
 
     // Step 2: Disconnect exchange.
     await this.exchange.disconnect();
@@ -241,6 +306,25 @@ export class TradingBot {
         } else if (signal.type === "EXIT") {
           await this.handleExit(signal, dbPosition);
         } else {
+          const nowMs = Date.now();
+          const reasonChanged = signal.reason !== this.lastHoldReasonForLog;
+          const throttleElapsed = nowMs - this.lastHoldLogAtMs >= TradingBot.HOLD_LOG_THROTTLE_MS;
+          if (reasonChanged || throttleElapsed) {
+            this.lastHoldReasonForLog = signal.reason;
+            this.lastHoldLogAtMs = nowMs;
+            this.persistThought({
+              level: "INFO",
+              event: "strategy_hold",
+              message: signal.reason,
+              metadata: {
+                candleTimeUtcMs: candle.timeUtcMs,
+                symbol: this.config.symbol,
+                strategy: this.strategy.name,
+                hasOpenPosition: strategyPosition !== null,
+                ...this.summarizeStrategyStateForLog()
+              }
+            });
+          }
           this.logger.debug("Strategy hold signal", {
             event: "strategy_hold",
             reason: signal.reason
@@ -295,6 +379,17 @@ export class TradingBot {
         closePrice
       });
 
+      this.persistThought({
+        level: "WARN",
+        event: "position_closed_externally",
+        message: "DB position closed: exchange no longer had an open position (SL/TP hit or manual close).",
+        metadata: {
+          positionId: dbPosition.id,
+          closePrice,
+          symbol: this.config.symbol
+        }
+      });
+
       // Update equity after external close.
       const balance = await this.exchange.getBalance();
       if (this.isPositiveNumber(balance.total)) {
@@ -313,8 +408,29 @@ export class TradingBot {
         event: "signal_entry_invalid",
         reason: signal.reason
       });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_invalid_signal",
+        message: `Invalid ENTRY shape: ${signal.reason}`,
+        metadata: { symbol: this.config.symbol }
+      });
       return;
     }
+
+    this.persistThought({
+      level: "INFO",
+      event: "strategy_entry_intent",
+      message: signal.reason,
+      metadata: {
+        side: signal.side,
+        price: signal.price,
+        stopLoss: signal.stopLoss,
+        takeProfit: signal.takeProfit,
+        symbol: this.config.symbol,
+        strategy: this.strategy.name,
+        ...this.summarizeStrategyStateForLog()
+      }
+    });
 
     // Step 1b: Block entry if already in a position (DB or exchange).
     if (dbPosition !== null) {
@@ -322,6 +438,17 @@ export class TradingBot {
         event: "entry_blocked_db_position",
         positionId: dbPosition.id,
         side: dbPosition.side
+      });
+      this.persistThought({
+        level: "INFO",
+        event: "entry_blocked_open_db_position",
+        message: "Strategy wanted ENTRY but bot already has an open DB position.",
+        metadata: {
+          positionId: dbPosition.id,
+          side: dbPosition.side,
+          strategyReason: signal.reason,
+          symbol: this.config.symbol
+        }
       });
       return;
     }
@@ -334,6 +461,17 @@ export class TradingBot {
         exchangeSide: exchangePosition.side,
         exchangeQty: exchangePosition.quantity
       });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_exchange_position",
+        message: "Strategy ENTRY blocked: exchange already shows an open position.",
+        metadata: {
+          exchangeSide: exchangePosition.side,
+          exchangeQty: exchangePosition.quantity,
+          strategyReason: signal.reason,
+          symbol: this.config.symbol
+        }
+      });
       return;
     }
 
@@ -343,6 +481,12 @@ export class TradingBot {
       this.logger.warn("Entry blocked: invalid market price", {
         event: "entry_invalid_price",
         price: marketPrice
+      });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_invalid_price",
+        message: "ENTRY blocked: market price missing or non-positive.",
+        metadata: { price: marketPrice, strategyReason: signal.reason, symbol: this.config.symbol }
       });
       return;
     }
@@ -366,6 +510,12 @@ export class TradingBot {
         event: "entry_invalid_equity",
         equity: balance.total
       });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_invalid_equity",
+        message: "ENTRY blocked: account equity missing or non-positive.",
+        metadata: { equity: balance.total, strategyReason: signal.reason, symbol: this.config.symbol }
+      });
       return;
     }
 
@@ -382,7 +532,29 @@ export class TradingBot {
     }
 
     // Step 3: Determine order quantity.
-    const quantity = this.calculateQuantity(signal, marketPrice, effectiveBalance);
+    let quantity: number;
+    try {
+      quantity = this.calculateQuantity(signal, marketPrice, effectiveBalance);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Entry blocked: position sizing failed: ${msg}`, {
+        event: "entry_sizing_failed",
+        strategyReason: signal.reason
+      });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_sizing_failed",
+        message: msg,
+        metadata: {
+          marketPrice,
+          effectiveBalance,
+          strategyReason: signal.reason,
+          symbol: this.config.symbol,
+          stopLoss: signal.stopLoss
+        }
+      });
+      return;
+    }
 
     const positionNotional = quantity * marketPrice;
 
@@ -395,6 +567,17 @@ export class TradingBot {
         `This would be ${(positionNotional / balance.total).toFixed(1)}x your balance. ` +
         `Check your leverage settings and risk parameters.`;
       this.logger.error(errorMsg, { event: "position_too_large" });
+      this.persistThought({
+        level: "CRITICAL",
+        event: "entry_blocked_position_too_large",
+        message: errorMsg,
+        metadata: {
+          positionNotional,
+          balanceTotal: balance.total,
+          symbol: this.config.symbol,
+          strategyReason: signal.reason
+        }
+      });
       await this.alerting?.sendAlert({
         level: "CRITICAL",
         message: errorMsg,
@@ -431,17 +614,48 @@ export class TradingBot {
         event: "risk_blocked",
         botId: this.id
       });
+      this.persistThought({
+        level: "WARN",
+        event: "entry_blocked_risk",
+        message: riskCheck.reason,
+        metadata: {
+          symbol: this.config.symbol,
+          quantity,
+          marketPrice,
+          strategyReason: signal.reason,
+          ...(riskCheck.details !== undefined ? { details: riskCheck.details } : {})
+        }
+      });
       return;
     }
 
     // Step 5: Execute entry order.
-    const result = await this.orderExecutor.executeEntry({
-      botId: this.id,
-      symbol: this.config.symbol,
-      signal,
-      quantity,
-      marketPrice
-    });
+    let result: Awaited<ReturnType<OrderExecutor["executeEntry"]>>;
+    try {
+      result = await this.orderExecutor.executeEntry({
+        botId: this.id,
+        symbol: this.config.symbol,
+        signal,
+        quantity,
+        marketPrice
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.persistThought({
+        level: "ERROR",
+        event: "order_entry_failed",
+        message: msg,
+        metadata: {
+          symbol: this.config.symbol,
+          side: signal.side,
+          quantity,
+          marketPrice,
+          strategyReason: signal.reason
+        }
+      });
+      await this.handleError(err);
+      return;
+    }
     const entryOrder: ExchangeOrder = result.exchangeOrder;
 
     // Step 6: Notify strategy of fill.
@@ -460,6 +674,22 @@ export class TradingBot {
       takeProfit: signal.takeProfit,
       orderId: entryOrder.id
     });
+
+    this.persistThought({
+      level: "INFO",
+      event: "position_opened",
+      message: `Opened ${signal.side} — ${signal.reason}`,
+      metadata: {
+        side: signal.side,
+        quantity,
+        entryPrice: result.position.entryPrice,
+        stopLoss: signal.stopLoss,
+        takeProfit: signal.takeProfit,
+        orderId: entryOrder.id,
+        positionId: result.position.id,
+        symbol: this.config.symbol
+      }
+    });
   }
 
   /**
@@ -472,8 +702,28 @@ export class TradingBot {
         event: "signal_exit_no_position",
         reason: signal.reason
       });
+      this.persistThought({
+        level: "INFO",
+        event: "exit_ignored_no_position",
+        message: `EXIT signal ignored — no open position: ${signal.reason}`,
+        metadata: { symbol: this.config.symbol, strategy: this.strategy.name }
+      });
       return;
     }
+
+    this.persistThought({
+      level: "INFO",
+      event: "strategy_exit_intent",
+      message: signal.reason,
+      metadata: {
+        positionId: dbPosition.id,
+        side: dbPosition.side,
+        quantity: dbPosition.quantity,
+        symbol: this.config.symbol,
+        strategy: this.strategy.name,
+        ...this.summarizeStrategyStateForLog()
+      }
+    });
 
     // Step 2: Fetch market price and balance.
     const marketPrice = signal.price ?? (await this.exchange.getLastPrice());
@@ -481,6 +731,12 @@ export class TradingBot {
       this.logger.warn("Exit blocked: invalid market price", {
         event: "exit_invalid_price",
         price: marketPrice
+      });
+      this.persistThought({
+        level: "WARN",
+        event: "exit_blocked_invalid_price",
+        message: "EXIT blocked: invalid market price.",
+        metadata: { price: marketPrice, positionId: dbPosition.id, symbol: this.config.symbol }
       });
       return;
     }
@@ -491,16 +747,41 @@ export class TradingBot {
         event: "exit_invalid_equity",
         equity: balance.total
       });
+      this.persistThought({
+        level: "WARN",
+        event: "exit_blocked_invalid_equity",
+        message: "EXIT blocked: invalid equity.",
+        metadata: { equity: balance.total, positionId: dbPosition.id, symbol: this.config.symbol }
+      });
       return;
     }
 
     // Step 3: Execute exit order.
-    const result = await this.orderExecutor.executeExit({
-      botId: this.id,
-      position: dbPosition,
-      marketPrice,
-      reason: signal.reason
-    });
+    let result: Awaited<ReturnType<OrderExecutor["executeExit"]>>;
+    try {
+      result = await this.orderExecutor.executeExit({
+        botId: this.id,
+        position: dbPosition,
+        marketPrice,
+        reason: signal.reason
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.persistThought({
+        level: "ERROR",
+        event: "order_exit_failed",
+        message: msg,
+        metadata: {
+          symbol: this.config.symbol,
+          positionId: dbPosition.id,
+          side: dbPosition.side,
+          quantity: dbPosition.quantity,
+          exitReason: signal.reason
+        }
+      });
+      await this.handleError(err);
+      return;
+    }
     const exitOrder: ExchangeOrder = result.exchangeOrder;
 
     // Step 4: Update equity in SQLite.
@@ -514,6 +795,20 @@ export class TradingBot {
       exitPrice: result.exitPrice,
       reason: signal.reason,
       orderId: exitOrder.id
+    });
+
+    this.persistThought({
+      level: "INFO",
+      event: "position_closed",
+      message: signal.reason,
+      metadata: {
+        side: dbPosition.side,
+        quantity: dbPosition.quantity,
+        exitPrice: result.exitPrice,
+        orderId: exitOrder.id,
+        positionId: dbPosition.id,
+        symbol: this.config.symbol
+      }
     });
   }
 
@@ -611,6 +906,16 @@ export class TradingBot {
     // Step 1: Skip when warmup period is zero.
     const warmup = this.strategy.warmupPeriod;
     if (!Number.isFinite(warmup) || warmup <= 0) {
+      this.persistThought({
+        level: "INFO",
+        event: "strategy_initialized",
+        message: "Strategy started with no historical warmup (warmupPeriod <= 0).",
+        metadata: {
+          symbol: this.config.symbol,
+          strategy: this.strategy.name,
+          ...this.summarizeStrategyStateForLog()
+        }
+      });
       return;
     }
 
@@ -624,6 +929,18 @@ export class TradingBot {
     this.logger.info("Strategy initialized", {
       event: "strategy_initialized",
       warmupCount: strategyCandles.length
+    });
+
+    this.persistThought({
+      level: "INFO",
+      event: "strategy_initialized",
+      message: `Strategy warmed up with ${String(strategyCandles.length)} candles`,
+      metadata: {
+        warmupCount: strategyCandles.length,
+        symbol: this.config.symbol,
+        strategy: this.strategy.name,
+        ...this.summarizeStrategyStateForLog()
+      }
     });
   }
 
@@ -666,12 +983,22 @@ export class TradingBot {
   }
 
   /**
-   * Waits until the next candle interval.
+   * Waits until the next candle interval, waking periodically so `last_heartbeat` stays fresh.
+   *
+   * Without chunking, a 4h bot would only write Supabase `bots.last_heartbeat` every ~4h because
+   * the main loop sleeps the full bar length after each iteration (including "same candle" waits).
    */
   private async waitForNextCandle(): Promise<void> {
     const intervalMs =
       this.candleIntervalMsOverride ?? intervalToMs(this.config.interval);
-    await this.sleep(intervalMs);
+    const sliceMs = Math.min(this.heartbeatIntervalMs, intervalMs);
+    let remaining = intervalMs;
+    while (remaining > 0 && this.isRunning) {
+      const step = Math.min(sliceMs, remaining);
+      await this.sleep(step);
+      remaining -= step;
+      await this.updateHeartbeatIfNeeded();
+    }
   }
 
   /**
@@ -686,6 +1013,13 @@ export class TradingBot {
     this.logger.error("Bot error", {
       event: "bot_error",
       error: message
+    });
+
+    this.persistThought({
+      level: "ERROR",
+      event: "bot_loop_error",
+      message,
+      metadata: { errorCount: this.errorCount, symbol: this.config.symbol }
     });
 
     // Step 3: Send alert when configured.
