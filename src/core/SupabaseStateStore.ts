@@ -359,6 +359,25 @@ export class SupabaseStateStore implements BotStateStore {
       return "";
     }
 
+    // Guard: check for an existing open position before inserting.
+    // positions(bot_id) has a UNIQUE constraint so a duplicate insert would fail with a DB
+    // error anyway, but this gives a clear WARN log and avoids a noisy constraint violation
+    // during rapid restart cycles (e.g. reconcile storm).
+    const { data: existing, error: eErr } = await this.client
+      .from("positions")
+      .select("id")
+      .eq("bot_id", position.botId)
+      .maybeSingle();
+
+    if (eErr === null && existing !== null) {
+      this.logger.warn("createPosition skipped: open position already exists for this bot", {
+        event: "create_position_duplicate",
+        botId: position.botId,
+        existingId: (existing as { id: string }).id
+      });
+      return (existing as { id: string }).id;
+    }
+
     const configId = (botRow as { config_id: string }).config_id;
     const id = randomUUID();
 

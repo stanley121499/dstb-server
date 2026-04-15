@@ -1,8 +1,8 @@
 ---
 title: "Entity — DSTB Next.js dashboard"
 type: entity
-updated: 2026-04-08
-sources: 6
+updated: 2026-04-13
+sources: 7
 tags: [dstb, dashboard, nextjs, supabase]
 ---
 
@@ -37,10 +37,38 @@ Web UI for **Stanley/Darren**: bot grid, config editing with version history, tr
 | `/api/behavior/run-backtest` | Phase 6: proxy to bot `POST /behavior/run-backtest` |
 | `/api/behavior/generate-analyzer` | Phase 6: server LLM (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) → JSON `{ code }` for analyzer editor |
 
+## Bot card status display (post 2026-04-13)
+
+The grid card uses `effectiveStatus(enabled, botStatus, heartbeatStale)` rather than reading `bots.status` raw:
+
+| Condition | Display |
+|-----------|---------|
+| `configs.enabled === false` | `"disabled"` — grey dot, card 60% opacity |
+| `status === "running"` AND heartbeat > 5 min stale | `"unresponsive"` — amber dot + amber text |
+| Otherwise | passthrough `bots.status` |
+
+Toggle switch shows `disabled` + `opacity-50` while the Supabase `.update()` call is in flight (prevents double-clicks).
+
+## Loading states (added 2026-04-13)
+
+All routes now have `loading.tsx` Suspense fallbacks shown immediately on link click:
+
+| Route | File |
+|-------|------|
+| `/` | `dashboard/app/loading.tsx` |
+| `/trades` | `dashboard/app/trades/loading.tsx` |
+| `/logs` | `dashboard/app/logs/loading.tsx` |
+| `/analytics` | `dashboard/app/analytics/loading.tsx` |
+| `/behavior` | `dashboard/app/behavior/loading.tsx` |
+| `/config/*` | `dashboard/app/config/loading.tsx` |
+
+`NavigationProgress.tsx` provides a 3px top bar; `NavBar.tsx` shows a pulsing beacon on the clicked link during transitions.
+
 ## Key files
 
-- `dashboard/app/` — pages
+- `dashboard/app/` — pages and `loading.tsx` skeletons
 - `dashboard/components/bot-grid.tsx`, `config-editor-form.tsx`, `trade-detail-chart.tsx`, `analytics-charts.tsx`, `behavior-cycle-chart.tsx`
+- `dashboard/components/shell/NavBar.tsx`, `AppShell.tsx`, `NavigationProgress.tsx`
 - `dashboard/lib/tradeChart.ts`, `dashboard/lib/behaviorChart.ts`, `dashboard/lib/analytics/*`
 - `dashboard/lib/supabase/server.ts`, `client.ts`
 - `dashboard/app/actions/config.ts`

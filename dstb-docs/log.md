@@ -69,3 +69,15 @@ Append-only timeline. Newest entries at the **bottom** (or top — stay consiste
 - **Raw:** none (implementation recorded in repo only; plan aligned with `raw/2026-04-07-phase-plan-v3.md` Phase 6 + `raw/2026-04-07-dashboard-spec.md` §12–13)
 - **Wiki:** added `wiki/concepts/multi-timeframe-bots-gap.md`; updated `wiki/entities/dstb-dashboard.md`, `wiki/synthesis/v3-planning-document-set.md`, `index.md`
 - **Notes:** Dashboard: `/behavior/environments` pipeline, `derived_params` Zod + shared `insertConfigAndFirstVersion`, `/api/behavior/run-backtest` + `/api/behavior/generate-analyzer`, `/logs` + Realtime `bot_logs` migration `20260408120000_realtime_bot_logs.sql`. Bot: `src/backtest/runBacktestWithYahoo.ts`, `POST /behavior/run-backtest`, optional `BOT_AUTO_RESTART*`, `equityAlertJob` + env thresholds. Multi-timeframe live subscription deferred — see gap concept.
+
+## [2026-04-13] ingest | Live smoke test — bugs and UX fixes
+
+- **Raw:** `raw/2026-04-13-live-smoke-test-bugs-and-ux-fixes.md`
+- **Wiki:** added `wiki/sources/live-smoke-test-bugs-and-ux-fixes.md`; updated `wiki/entities/dstb-trading-bot.md` (status lifecycle, open issues), `wiki/entities/dstb-dashboard.md` (effectiveStatus, loading states, new key files), `index.md`
+- **Notes:** Two bugs fixed — `TradingBot.stop()` now writes `"stopped"` to `bots.status`; dashboard `effectiveStatus()` derives display from `enabled` + heartbeat age. Added 6 `loading.tsx` skeleton screens, `NavigationProgress` top bar, NavBar pending link beacon, bot toggle per-switch loading state. Two issues remain open: ETH Live Bot v3 crash loop (ERROR logs not yet retrieved) and ORB BTC 15m reconcile storm (no uniqueness guard on open positions). Commit `44a8ef2` on `main`.
+
+## [2026-04-14] query | Investigate + fix two open issues from smoke test
+
+- **Question:** Root cause and fix for ETH Live Bot v3 crash loop and ORB BTC 15m reconcile storm.
+- **Output filed:** updated `wiki/sources/live-smoke-test-bugs-and-ux-fixes.md`, `wiki/entities/dstb-trading-bot.md`
+- **Notes:** Both issues traced to a single root cause — `TelegramAlerter.startPolling()` used `void this.pollOnce()` without `.catch()`; Node.js 22 treats unhandled rejections as fatal, crashing the entire server every ~1 min when Telegram API was unreachable (ETIMEDOUT). Fix: `.catch()` on `pollOnce()`. Reconcile storm was a symptom of the crash loop (each restart created + immediately closed a DB position via exchange API lag). Additional guards added: 60s reconcile grace period in `syncPositionWithExchange` + pre-insert uniqueness check in `createPosition`. Migration `20260414120000_positions_created_at.sql` adds `created_at` to `positions`.

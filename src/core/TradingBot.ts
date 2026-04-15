@@ -62,6 +62,20 @@ export class TradingBot {
   private static readonly HOLD_LOG_THROTTLE_MS = 300_000;
 
   /**
+   * Timestamp set when startup reconcile creates a DB position from an exchange snapshot.
+   * Used by syncPositionWithExchange to avoid immediately closing a position that was
+   * just created from exchange state (exchange API lag can return "flat" milliseconds later).
+   * Cleared after the grace period expires.
+   */
+  private reconcileCreatedAtMs: number | null = null;
+  /**
+   * Grace period after a startup reconcile-create during which syncPositionWithExchange
+   * will not close the position. Defaults to 60 seconds — long enough to survive exchange
+   * API lag but short enough that legitimate SL/TP fills are still caught promptly.
+   */
+  private static readonly RECONCILE_GRACE_PERIOD_MS = 60_000;
+
+  /**
    * Creates a new TradingBot instance.
    *
    * Inputs:
@@ -379,6 +393,25 @@ export class TradingBot {
 
     if (exchangePosition === null) {
       // Exchange is flat but DB still has an open position.
+      // Guard: if this position was just created by startup reconcile within the grace period,
+      // skip the close. Exchange APIs often return a stale "flat" snapshot for a few seconds
+      // after a position is reconciled, which would otherwise trigger a rapid create→close cycle
+      // on every server restart (as seen in the ORB BTC 15m reconcile storm 2026-04-13).
+      if (this.reconcileCreatedAtMs !== null) {
+        const ageMs = Date.now() - this.reconcileCreatedAtMs;
+        if (ageMs < TradingBot.RECONCILE_GRACE_PERIOD_MS) {
+          this.logger.info("syncPositionWithExchange: skipping close — position is within reconcile grace period", {
+            event: "position_sync_grace_skip",
+            positionId: dbPosition.id,
+            ageMs,
+            gracePeriodMs: TradingBot.RECONCILE_GRACE_PERIOD_MS
+          });
+          return;
+        }
+        // Grace period expired — clear the flag and proceed with normal sync.
+        this.reconcileCreatedAtMs = null;
+      }
+
       // This means SL/TP was hit on the exchange (or manually closed).
       const marketPrice = await this.exchange.getLastPrice();
       const closePrice = this.isPositiveNumber(marketPrice) ? marketPrice : dbPosition.entryPrice;
@@ -904,6 +937,14 @@ export class TradingBot {
       exchangePosition,
       marketPrice
     });
+
+    // Step 3: If a DB position was created from the exchange snapshot, record the time.
+    // syncPositionWithExchange will skip closing this position for RECONCILE_GRACE_PERIOD_MS
+    // to avoid a rapid create → close cycle caused by exchange API lag returning "flat"
+    // milliseconds after reconcile saw an open position.
+    if (result.action === "created") {
+      this.reconcileCreatedAtMs = Date.now();
+    }
 
     this.logger.info("Position reconciliation complete", {
       event: "position_reconcile",

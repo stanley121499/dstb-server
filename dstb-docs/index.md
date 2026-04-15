@@ -21,6 +21,7 @@
 - [[wiki/sources/e2e-testing-v3-backlog|E2E testing v3 backlog]] — `raw/2026-04-07-e2e-testing-v3-backlog.md`
 - [[wiki/sources/phase4-behavior-implementation|Phase 4 behavior (Supabase) implementation]] — `raw/2026-04-07-phase4-behavior-supabase-implementation.md`
 - [[wiki/sources/phase5-behavior-implementation|Phase 5 behavior editor + self-service analysis]] — `raw/2026-04-07-phase5-behavior-editor-implementation.md`
+- [[wiki/sources/live-smoke-test-bugs-and-ux-fixes|Live smoke test — bugs and UX fixes (2026-04-13)]] — `raw/2026-04-13-live-smoke-test-bugs-and-ux-fixes.md`
 
 ## Entities
 

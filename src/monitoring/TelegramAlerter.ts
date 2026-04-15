@@ -285,8 +285,15 @@ export class TelegramAlerter {
     }
 
     // Step 1: Poll on a fixed interval.
+    // Errors are caught here so a transient network failure (ETIMEDOUT, ENETUNREACH, etc.)
+    // does not produce an unhandled rejection that crashes the Node.js process.
     this.pollTimer = setInterval(() => {
-      void this.pollOnce();
+      void this.pollOnce().catch((err: unknown) => {
+        this.logger.warn("Telegram poll failed (network or API error)", {
+          event: "telegram_poll_failed",
+          error: err instanceof Error ? err.message : String(err)
+        });
+      });
     }, this.config.pollIntervalMs);
   }
 
