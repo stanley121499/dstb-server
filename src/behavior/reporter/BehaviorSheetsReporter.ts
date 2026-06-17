@@ -9,25 +9,36 @@ export type BehaviorSheetsReporterOptions = Readonly<{
 }>;
 
 const HEADER_ROW = [
-  "Entry Date", "UID", "TradingView Link", "Pair", "Day",
-  "Day Owner", "Date (dd/mm/yyyy)", "Date Owner",
-  "Asia Range", "Previous-Day Level", "Two-Candle First Interaction Behavior",
-  "First Interaction Time", "First Interaction Market Session",
-  "First Interaction Market Session Time Mode",
+  "TradingView Link", "Pair", "Day",
+  "Day Owner\n(Which trading day's behavior does this belong to)",
+  "Date \n(dd/mm/yyyy)",
+  "Date Owner\n(Which date should this be counted under)",
+  "Asia Range \n(Which side of Asia range liquidity was first interacted)",
+  "Previous-Day Level\n (First interaction decision level)",
+  "Two-Candle First Interaction Behavior\n(First two 15M candles closed after PDH/PDL interaction at decision level, 2nd candle more important)",
+  "First Interaction Time\n(Time of the first 15M candle closed only that interacts with PDH/PDL)",
+  "First Interaction Market Session Timing\n(Market session and phase at the time of first PDH/PDL decision level interaction)",
+  "First Interaction Market Session Time Mode\n(Identifies the time standard condition at the moment of the first PDH/PDL interaction)",
   "Entry Price ($)", "Leverage (X)", "Margin Used ($)", "Position Size (Units)",
   "Account Risk", "Stop Loss Price ($)", "Take Profit Price ($)", "R", "Fees ($)",
-  "Exit Price ($)", "Exit Date & Time", "Gross P/L", "Net P/L",
-  "Decision Attempt #1 Begin Type", "Decision Attempt #1 Begin Time",
-  "Decision Attempt #1 Output", "Decision Attempt #1 Confirm Time",
-  "Decision Attempt #1 Failed Status",
-  "Resolved Decision Output", "Resolved Decision Strength",
-  "Resolved Outcome Direction", "Resolved Outcome MoveScore", "Resolved Outcome Quality",
-  "Resolved Outcome Begin Time", "Outcome Peak Time",
-  "HTF 4H Edge", "HTF 4H Edge Link",
-  "Lifecycle Crossed Day Boundary",
-  "Notes",
-  "Win", "Loss", "Win$", "Loss$", "In Use", "Month",
-  "Consecutive Wins", "Consecutive Losses", "UID Link"
+  "Exit Price ($)",
+  "Exit date and time\n(dd/mm/yyyy hh:mm:ss)",
+  "Gross P/L (before fees)", "Net P/L (after fees)",
+  "Decision Attempt #1 Begin Type \n(How the market initiated the decision process at PDH/PDL)",
+  "Decision Attempt #1 Begin Time\n(This is the first structural directional intent)",
+  "Decision Attempt #1 Output\n(This is fully aligned with your 2-consecutive-candle closed rule and PDH/PDL structure)",
+  "Decision Attempt #1 Confirm Time\n(Based on Decision Attempt #1 Output)",
+  "Decision Attempt #1 Failed Status\n(Measures durability of the confirmed first attempt + c3-c6)",
+  "Resolved Decision Output \n(Represents the true decision outcome, not the initial attempt #1 + c3-c6 candle cosed)",
+  "Resolved Decision Strength\n(Strength and quality of the market's decision attempt at PDH/PDL)",
+  "Resolved Outcome Direction\n(Actual price response CONTINUATION, MEAN-REVERSION or STALL, after a resolved decision)",
+  "Resolved Outcome MoveScore\n(Value represents how far price moved relative to the Decision Level, expressed in ATR units)",
+  "Resolved Outcome Quality\n(How quality the resolved-decision move was measured by Move Score)",
+  "Resolved Outcome Begin Time\n(Marks the start of post-confirmation commitment)",
+  "Outcome Peak Time\n(Time of Maximum Expansion Before Exhaustion)",
+  "HTF 4H Edge\n (4H Structural Context at the moment the Decision is confirmed)",
+  "HTF 4H Edge Link\n(Manual input time being)",
+  "Lifecycle Crossed Day Boundary\n(Captures how far the behavioral lifecycle extends relative to the daily reset (08:00:00)"
 ];
 
 // Reusing types from GoogleSheetsReporter where applicable
@@ -187,20 +198,20 @@ export class BehaviorSheetsReporter {
 
   private rowToArray(row: BehaviorRow): string[] {
     return [
-      row.entryDate, row.uid, row.tradingViewLink, row.pair, row.day,
-      row.dayOwner, row.date, row.dateOwner, row.asiaRange, row.previousDayLevel,
-      row.twoCandleBehavior, row.firstInteractionTime, row.firstInteractionSession,
-      row.firstInteractionSessionTimeMode,
+      row.tradingViewLink, row.pair, row.day,
+      row.dayOwner, row.date, row.dateOwner,
+      row.asiaRange, row.previousDayLevel,
+      row.twoCandleBehavior, row.firstInteractionTime,
+      row.firstInteractionSession, row.firstInteractionSessionTimeMode,
       row.entryPrice, row.leverage, row.marginUsed, row.positionSize,
       row.accountRisk, row.stopLossPrice, row.takeProfitPrice, row.r, row.fees,
       row.exitPrice, row.exitDateTime, row.grossPnl, row.netPnl,
       row.decisionBeginType, row.decisionBeginTime, row.decisionOutput, row.decisionConfirmTime,
       row.failedStatus, row.resolvedDecisionOutput, row.resolvedDecisionStrength,
-      row.resolvedOutcomeDirection, row.moveScoreValue, row.resolvedOutcomeQuality, row.resolvedOutcomeBeginTime,
-      row.outcomePeakTime, row.htf4hEdge, row.htf4hEdgeLink,
-      row.lifecycleCrossedDayBoundary, row.notes,
-      row.win, row.loss, row.winDollar, row.lossDollar, row.inUse, row.month,
-      row.consecutiveWins, row.consecutiveLosses, row.uidLink
+      row.resolvedOutcomeDirection, row.moveScoreValue, row.resolvedOutcomeQuality,
+      row.resolvedOutcomeBeginTime, row.outcomePeakTime,
+      row.htf4hEdge, row.htf4hEdgeLink,
+      row.lifecycleCrossedDayBoundary
     ];
   }
 }
