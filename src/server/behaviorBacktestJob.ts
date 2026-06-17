@@ -52,45 +52,40 @@ export function startBehaviorBacktestScheduler(args: Readonly<{
   let running = false;
   let nextTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const log = (msg: string): void => {
+    // Write to both stdout (visible in Render log stream) and the file logger.
+    console.log(msg);
+    args.logger.info(msg, { event: "behavior_backtest_job" });
+  };
+
   const runIfNeeded = (reason: string): void => {
     if (running) {
-      args.logger.info(
-        "[behavior-backtest-job] Skipping — a run is already in progress",
-        { event: "behavior_backtest_skip" }
-      );
+      log("[behavior-backtest-job] Skipping — a run is already in progress");
       return;
     }
 
     const today = todayGmt8();
     if (today === lastRunDate) {
-      args.logger.info(
-        `[behavior-backtest-job] Already ran for ${today}, skipping (${reason})`,
-        { event: "behavior_backtest_skip", date: today }
-      );
+      log(`[behavior-backtest-job] Already ran for ${today}, skipping (${reason})`);
       return;
     }
 
     running = true;
     lastRunDate = today;
 
-    args.logger.info(
-      `[behavior-backtest-job] Starting daily backtest for ${today} (${reason})`,
-      { event: "behavior_backtest_start", date: today }
-    );
+    log(`[behavior-backtest-job] Starting daily backtest for ${today} (${reason})`);
 
     runBehaviorBacktest()
       .then(() => {
-        args.logger.info(
-          `[behavior-backtest-job] Completed for ${today}`,
-          { event: "behavior_backtest_done", date: today }
-        );
+        log(`[behavior-backtest-job] Completed for ${today}`);
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        args.logger.warn(
-          `[behavior-backtest-job] Failed for ${today}: ${msg}`,
-          { event: "behavior_backtest_error", date: today }
-        );
+        console.error(`[behavior-backtest-job] Failed for ${today}: ${msg}`);
+        args.logger.warn(`[behavior-backtest-job] Failed for ${today}: ${msg}`, {
+          event: "behavior_backtest_error",
+          date: today,
+        });
         // Reset so the midnight scheduler retries on the next tick.
         lastRunDate = null;
       })
@@ -106,9 +101,8 @@ export function startBehaviorBacktestScheduler(args: Readonly<{
     }
     const delayMs = msUntilNextMidnightGmt8();
     const nextRun = new Date(Date.now() + delayMs).toISOString();
-    args.logger.info(
-      `[behavior-backtest-job] Next scheduled run at ~${nextRun} (in ${Math.round(delayMs / 60000)} min)`,
-      { event: "behavior_backtest_scheduled", nextRunUtc: nextRun }
+    log(
+      `[behavior-backtest-job] Next scheduled run at ~${nextRun} (in ${Math.round(delayMs / 60000)} min)`
     );
     nextTimer = setTimeout(() => {
       runIfNeeded("scheduled midnight GMT+8");
