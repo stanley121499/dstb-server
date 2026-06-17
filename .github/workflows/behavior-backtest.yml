@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       start_date:
-        description: "Override start date (YYYY-MM-DD). Defaults to yesterday GMT+8."
+        description: "Override start date (YYYY-MM-DD). Defaults to BEHAVIOR_BACKTEST_START env default (2024-01-01)."
         required: false
       end_date:
-        description: "Override end date (YYYY-MM-DD). Defaults to yesterday GMT+8."
+        description: "Override end date (YYYY-MM-DD). Defaults to today UTC."
         required: false
 
 jobs:
@@ -38,27 +38,15 @@ jobs:
       - name: Write Google service account key file
         run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > /tmp/google-sa-key.json
 
-      # Compute "yesterday in GMT+8" as the backtest window unless overridden.
-      # At 00:00 GMT+8 the previous calendar day has just finished — that is the day to process.
-      - name: Compute backtest date range
-        id: dates
-        run: |
-          if [ -n "${{ github.event.inputs.start_date }}" ]; then
-            echo "start=${{ github.event.inputs.start_date }}" >> $GITHUB_OUTPUT
-            echo "end=${{ github.event.inputs.end_date }}" >> $GITHUB_OUTPUT
-          else
-            # "yesterday" in GMT+8: UTC now is 16:00, so UTC date == GMT+8 yesterday
-            YESTERDAY=$(TZ="Asia/Kuala_Lumpur" date -d "yesterday" +%Y-%m-%d)
-            echo "start=${YESTERDAY}" >> $GITHUB_OUTPUT
-            echo "end=${YESTERDAY}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run behavior backtest
         env:
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SERVICE_ACCOUNT_KEY: /tmp/google-sa-key.json
-          BEHAVIOR_BACKTEST_START: ${{ steps.dates.outputs.start }}
-          BEHAVIOR_BACKTEST_END: ${{ steps.dates.outputs.end }}
+          # bulkWrite clears and rewrites the full sheet on every run.
+          # We always run the full history so the sheet stays complete.
+          # Manual overrides via workflow_dispatch inputs are passed through when set.
+          BEHAVIOR_BACKTEST_START: ${{ github.event.inputs.start_date || '2024-01-01' }}
+          BEHAVIOR_BACKTEST_END: ${{ github.event.inputs.end_date || '' }}
           BEHAVIOR_PAIR: "BTC-USD"
           BEHAVIOR_SHEET_TAB: ${{ vars.BEHAVIOR_SHEET_TAB }}
           BEHAVIOR_DASHBOARD_TAB: ${{ vars.BEHAVIOR_DASHBOARD_TAB }}
