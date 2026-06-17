@@ -45,7 +45,7 @@ jobs:
           # bulkWrite clears and rewrites the full sheet on every run.
           # We always run the full history so the sheet stays complete.
           # Manual overrides via workflow_dispatch inputs are passed through when set.
-          BEHAVIOR_BACKTEST_START: ${{ github.event.inputs.start_date || '2024-01-01' }}
+          BEHAVIOR_BACKTEST_START: ${{ github.event.inputs.start_date || '2024-11-07' }}
           BEHAVIOR_BACKTEST_END: ${{ github.event.inputs.end_date || '' }}
           BEHAVIOR_PAIR: "BTC-USD"
           BEHAVIOR_SHEET_TAB: ${{ vars.BEHAVIOR_SHEET_TAB }}
