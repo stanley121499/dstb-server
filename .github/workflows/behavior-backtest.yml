@@ -38,15 +38,24 @@ jobs:
       - name: Write Google service account key file
         run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > /tmp/google-sa-key.json
 
+      # Compute dates explicitly so env vars are never empty strings.
+      # BEHAVIOR_BACKTEST_END ?? fallback only works on null/undefined, not "".
+      - name: Compute date range
+        id: dates
+        run: |
+          START="${{ github.event.inputs.start_date }}"
+          END="${{ github.event.inputs.end_date }}"
+          echo "start=${START:-2024-11-07}" >> $GITHUB_OUTPUT
+          echo "end=${END:-$(date -u +%Y-%m-%d)}" >> $GITHUB_OUTPUT
+
       - name: Run behavior backtest
         env:
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SERVICE_ACCOUNT_KEY: /tmp/google-sa-key.json
           # bulkWrite clears and rewrites the full sheet on every run.
           # We always run the full history so the sheet stays complete.
-          # Manual overrides via workflow_dispatch inputs are passed through when set.
-          BEHAVIOR_BACKTEST_START: ${{ github.event.inputs.start_date || '2024-11-07' }}
-          BEHAVIOR_BACKTEST_END: ${{ github.event.inputs.end_date || '' }}
+          BEHAVIOR_BACKTEST_START: ${{ steps.dates.outputs.start }}
+          BEHAVIOR_BACKTEST_END: ${{ steps.dates.outputs.end }}
           BEHAVIOR_PAIR: "BTC-USD"
           BEHAVIOR_SHEET_TAB: ${{ vars.BEHAVIOR_SHEET_TAB }}
           BEHAVIOR_DASHBOARD_TAB: ${{ vars.BEHAVIOR_DASHBOARD_TAB }}
