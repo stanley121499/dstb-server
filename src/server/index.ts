@@ -8,6 +8,7 @@ import { TelegramAlerter } from "../monitoring/TelegramAlerter.js";
 import { BotManager } from "./BotManager.js";
 import { tryHandleBehaviorApi } from "./behaviorHttpHandlers.js";
 import { startEquityDropAlertLoop } from "./equityAlertJob.js";
+import { startBehaviorBacktestScheduler } from "./behaviorBacktestJob.js";
 import type { SupabaseStateStore } from "../core/SupabaseStateStore.js";
 
 const startedAtMs = Date.now();
@@ -77,6 +78,7 @@ async function startServer(): Promise<void> {
   let sheets: GoogleSheetsReporter | null = null;
   let botManager: BotManager | null = null;
   let equityAlertHandle: ReturnType<typeof setInterval> | null = null;
+  let stopBacktestScheduler: (() => void) | null = null;
 
   const portRaw = process.env["PORT"];
   const port =
@@ -186,6 +188,7 @@ async function startServer(): Promise<void> {
       clearInterval(equityAlertHandle);
       equityAlertHandle = null;
     }
+    stopBacktestScheduler?.();
     telegram?.stopPolling();
     sheets?.stop();
     healthServer.close();
@@ -230,6 +233,13 @@ async function startServer(): Promise<void> {
       ].join("\n"),
       botId: "server"
     });
+  }
+
+  // Start daily S2 behavior backtest scheduler (runs at midnight GMT+8 and on startup).
+  // Controlled by BEHAVIOR_BACKTEST_START / BEHAVIOR_BACKTEST_END / BEHAVIOR_PAIR env vars.
+  // Set BEHAVIOR_BACKTEST_DISABLED=true on Render to opt out.
+  if (process.env["BEHAVIOR_BACKTEST_DISABLED"] !== "true") {
+    stopBacktestScheduler = startBehaviorBacktestScheduler({ logger: serverLogger });
   }
 
   serverLogger.info("Server initialization complete. Running.", { event: "server_ready" });

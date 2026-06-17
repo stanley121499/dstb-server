@@ -1,4 +1,4 @@
-import { fetchBybitCandles } from "../../data/bybitDataSource.js";
+import { fetchBinanceCandles } from "../../data/binanceDataSource.js";
 import { toDateString } from "../utils.js";
 import type { Candle, DailyCycleInput } from "../types.js";
 
@@ -83,9 +83,8 @@ export function readBehaviorBacktestRangeFromEnv(): BehaviorBacktestRange {
 }
 
 /**
- * Fetches Bybit candles and builds daily cycle inputs for the configured range.
- * Bybit's public API has no geo-restrictions (works on GitHub Actions runners)
- * and provides full historical data for all intervals including native 4h.
+ * Fetches Binance candles and builds daily cycle inputs for the configured range.
+ * Runs inside the Render server process which has unrestricted access to Binance.
  */
 export async function loadBehaviorDailyCycleInputsForRange(
   range: BehaviorBacktestRange
@@ -94,7 +93,7 @@ export async function loadBehaviorDailyCycleInputsForRange(
 
   const fetch15mStart = subtractDays(backtestStart, 1);
   const fetch15mEnd = addHours(backtestEnd, 27);
-  const result15m = await fetchBybitCandles({
+  const result15m = await fetchBinanceCandles({
     symbol: pair,
     interval: "15m",
     startTimeUtc: fetch15mStart,
@@ -103,7 +102,7 @@ export async function loadBehaviorDailyCycleInputsForRange(
 
   const fetch4hStart = subtractDays(backtestStart, 45);
   const fetch4hEnd = addHours(backtestEnd, 27);
-  const result4h = await fetchBybitCandles({
+  const result4h = await fetchBinanceCandles({
     symbol: pair,
     interval: "4h",
     startTimeUtc: fetch4hStart,

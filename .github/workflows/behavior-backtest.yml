@@ -1,10 +1,8 @@
 name: Daily Behavior Backtest
 
 on:
-  schedule:
-    # 16:00 UTC = 00:00 GMT+8
-    - cron: "0 16 * * *"
-  # Allow manual trigger from the GitHub Actions UI
+  # Daily scheduling is handled in-process by the Render server (behaviorBacktestJob.ts).
+  # This workflow is kept for manual one-off runs only (e.g. historical re-runs, debugging).
   workflow_dispatch:
     inputs:
       start_date:
