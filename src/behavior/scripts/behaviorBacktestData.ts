@@ -1,5 +1,4 @@
-import { fetchYahooCandles } from "../../data/yahooFinance.js";
-import { resampleCandles } from "../../data/resample.js";
+import { fetchBybitCandles } from "../../data/bybitDataSource.js";
 import { toDateString } from "../utils.js";
 import type { Candle, DailyCycleInput } from "../types.js";
 
@@ -84,9 +83,9 @@ export function readBehaviorBacktestRangeFromEnv(): BehaviorBacktestRange {
 }
 
 /**
- * Fetches Yahoo Finance candles and builds daily cycle inputs for the configured range.
- * Yahoo Finance has no geo-restrictions, making it suitable for GitHub Actions runners.
- * 4h candles are not natively supported by Yahoo, so we fetch 1h and resample to 4h.
+ * Fetches Bybit candles and builds daily cycle inputs for the configured range.
+ * Bybit's public API has no geo-restrictions (works on GitHub Actions runners)
+ * and provides full historical data for all intervals including native 4h.
  */
 export async function loadBehaviorDailyCycleInputsForRange(
   range: BehaviorBacktestRange
@@ -95,27 +94,25 @@ export async function loadBehaviorDailyCycleInputsForRange(
 
   const fetch15mStart = subtractDays(backtestStart, 1);
   const fetch15mEnd = addHours(backtestEnd, 27);
-  const result15m = await fetchYahooCandles({
+  const result15m = await fetchBybitCandles({
     symbol: pair,
     interval: "15m",
     startTimeUtc: fetch15mStart,
     endTimeUtc: fetch15mEnd,
   });
 
-  // Yahoo Finance does not offer a native 4h interval, so we fetch 1h and resample.
   const fetch4hStart = subtractDays(backtestStart, 45);
   const fetch4hEnd = addHours(backtestEnd, 27);
-  const result1h = await fetchYahooCandles({
+  const result4h = await fetchBybitCandles({
     symbol: pair,
-    interval: "1h",
+    interval: "4h",
     startTimeUtc: fetch4hStart,
     endTimeUtc: fetch4hEnd,
   });
-  const candles4h = resampleCandles({ candles: result1h.candles, targetInterval: "4h" });
 
   return buildBehaviorDailyCycleInputs({
     candles15m: result15m.candles,
-    candles4h,
+    candles4h: result4h.candles,
     startDate: backtestStart,
     endDate: backtestEnd,
   });
