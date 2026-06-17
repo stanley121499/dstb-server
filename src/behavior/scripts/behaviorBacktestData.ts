@@ -1,4 +1,5 @@
-import { fetchBinanceCandles } from "../../data/binanceDataSource.js";
+import { fetchYahooCandles } from "../../data/yahooFinance.js";
+import { resampleCandles } from "../../data/resample.js";
 import { toDateString } from "../utils.js";
 import type { Candle, DailyCycleInput } from "../types.js";
 
@@ -83,7 +84,9 @@ export function readBehaviorBacktestRangeFromEnv(): BehaviorBacktestRange {
 }
 
 /**
- * Fetches Binance candles and builds daily cycle inputs for the configured range.
+ * Fetches Yahoo Finance candles and builds daily cycle inputs for the configured range.
+ * Yahoo Finance has no geo-restrictions, making it suitable for GitHub Actions runners.
+ * 4h candles are not natively supported by Yahoo, so we fetch 1h and resample to 4h.
  */
 export async function loadBehaviorDailyCycleInputsForRange(
   range: BehaviorBacktestRange
@@ -92,25 +95,27 @@ export async function loadBehaviorDailyCycleInputsForRange(
 
   const fetch15mStart = subtractDays(backtestStart, 1);
   const fetch15mEnd = addHours(backtestEnd, 27);
-  const result15m = await fetchBinanceCandles({
+  const result15m = await fetchYahooCandles({
     symbol: pair,
     interval: "15m",
     startTimeUtc: fetch15mStart,
     endTimeUtc: fetch15mEnd,
   });
 
+  // Yahoo Finance does not offer a native 4h interval, so we fetch 1h and resample.
   const fetch4hStart = subtractDays(backtestStart, 45);
   const fetch4hEnd = addHours(backtestEnd, 27);
-  const result4h = await fetchBinanceCandles({
+  const result1h = await fetchYahooCandles({
     symbol: pair,
-    interval: "4h",
+    interval: "1h",
     startTimeUtc: fetch4hStart,
     endTimeUtc: fetch4hEnd,
   });
+  const candles4h = resampleCandles({ candles: result1h.candles, targetInterval: "4h" });
 
   return buildBehaviorDailyCycleInputs({
     candles15m: result15m.candles,
-    candles4h: result4h.candles,
+    candles4h,
     startDate: backtestStart,
     endDate: backtestEnd,
   });
