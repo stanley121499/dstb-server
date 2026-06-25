@@ -76,7 +76,7 @@ export type BehaviorBacktestRange = Readonly<{
  * Reads range from env (same semantics as behavior backtest script).
  */
 export function readBehaviorBacktestRangeFromEnv(): BehaviorBacktestRange {
-  const backtestStart = process.env.BEHAVIOR_BACKTEST_START ?? "2024-01-01";
+  const backtestStart = process.env.BEHAVIOR_BACKTEST_START ?? "2021-11-07";
   const backtestEnd = process.env.BEHAVIOR_BACKTEST_END ?? new Date().toISOString().slice(0, 10);
   const pair = process.env.BEHAVIOR_PAIR ?? "BTC-USD";
   return { backtestStart, backtestEnd, pair };

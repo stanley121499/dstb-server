@@ -43,7 +43,7 @@ jobs:
         run: |
           START="${{ github.event.inputs.start_date }}"
           END="${{ github.event.inputs.end_date }}"
-          echo "start=${START:-2024-11-07}" >> $GITHUB_OUTPUT
+            echo "start=${START:-2021-11-07}" >> $GITHUB_OUTPUT
           echo "end=${END:-$(date -u +%Y-%m-%d)}" >> $GITHUB_OUTPUT
 
       - name: Run behavior backtest
