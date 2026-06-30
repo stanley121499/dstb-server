@@ -3,7 +3,7 @@ import { analyzeInteract } from "./interactAnalyzer";
 import { analyzeDecision } from "./decisionAnalyzer";
 import { analyzeOutcome } from "./outcomeAnalyzer";
 import { analyzeHtfContext } from "./htfContextAnalyzer";
-import { toDateString, toDayString, toMonthString } from "../utils";
+import { toDateString, toDayString, toMonthString, isUsDst, isUkDst } from "../utils";
 
 // ============================================================================
 // Verbose label maps — converts internal enum codes to Darren's sheet format
@@ -25,27 +25,104 @@ const ASIA_RANGE_VERBOSE: Readonly<Record<string, string>> = {
  * Maps raw MarketSession code to the verbose label written in the Google Sheet.
  * Format: "{CODE} — {description} {startTime} – {endTime}"
  * Times are in UTC+8 (MYT). Uses en-dash (–) between time range.
+ *
+ * Asia and market-closed sessions are DST-invariant (same times year-round).
+ * UK and US sessions shift by 1h when their respective DST is active, so four
+ * DST-variant tables are provided. Use getSessionVerboseLabel() to resolve the
+ * correct table for a given timestamp instead of indexing these maps directly.
  */
-const SESSION_VERBOSE: Readonly<Record<string, string>> = {
+
+/** Sessions whose UTC+8 windows never change regardless of DST. */
+const SESSION_VERBOSE_COMMON: Readonly<Record<string, string>> = {
   "ASIA_PRE":   "ASIA_PRE — Pre Asia Warm-up 08:00:00 – 08:59:59",
   "ASIA_H1":    "ASIA_H1 — 1st Half 09:00:00 – 10:59:59",
   "ASIA_TP_H1": "ASIA_TP_H1 — TP Zone 1st Half 11:00:00 – 12:29:59",
   "ASIA_H2":    "ASIA_H2 — 2nd Half 12:30:00 – 14:59:59",
   "ASIA_TP_H2": "ASIA_TP_H2 — TP Zone 2nd Half 15:00:00 – 15:59:59",
-  "UK_PRE":     "UK_PRE — Pre UK Warm-up 16:00:00 – 16:59:59",
-  "UK_H1":      "UK_H1 — 1st Half 17:00:00 – 18:59:59",
-  "UK_TP_H1":   "UK_TP_H1 — TP Zone 1st Half 19:00:00 – 20:59:59",
-  "UK_H2":      "UK_H2 — 2nd Half 21:00:00 – 22:59:59",
-  "UK_TP_H2":   "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
-  "US_PRE":     "US_PRE — Pre US Warm-up 21:30:00 – 22:29:59",
-  "US_H1":      "US_H1 — 1st Half 22:30:00 – 00:59:59",
-  "US_TP_H1":   "US_TP_H1 — TP Zone 1st Half 01:00:00 – 02:29:59",
-  "US_H2":      "US_H2 — 2nd Half 02:30:00 – 03:59:59",
-  "US_TP_H2":   "US_TP_H2 — TP Zone 2nd Half 04:00:00 – 04:59:59",
   "MKT_CLOSED": "MKT_CLOSED — Market Closed 05:00:00 – 06:29:59",
   "MKT_RESET":  "MKT_RESET — Market Reset 06:30:00 – 07:59:59",
   "N/A":        "N/A — No PDH/PDL interaction",
 };
+
+/** STD schedule — both UK and US on winter time (UTC+8 windows). */
+const SESSION_VERBOSE_STD: Readonly<Record<string, string>> = {
+  "UK_PRE":   "UK_PRE — Pre UK Warm-up 16:00:00 – 16:59:59",
+  "UK_H1":    "UK_H1 — 1st Half 17:00:00 – 18:59:59",
+  "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 19:00:00 – 20:59:59",
+  "UK_H2":    "UK_H2 — 2nd Half 21:00:00 – 21:29:59",
+  "US_PRE":   "US_PRE — Pre US Warm-up 21:30:00 – 22:29:59",
+  "US_H1":    "US_H1 — 1st Half 22:30:00 – 00:59:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
+  "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 01:00:00 – 02:29:59",
+  "US_H2":    "US_H2 — 2nd Half 02:30:00 – 03:59:59",
+  "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 04:00:00 – 04:59:59",
+};
+
+/** US DST only — US sessions shift 1h earlier; UK stays on winter schedule (UTC+8). */
+const SESSION_VERBOSE_US_DST: Readonly<Record<string, string>> = {
+  "UK_PRE":   "UK_PRE — Pre UK Warm-up 16:00:00 – 16:59:59",
+  "UK_H1":    "UK_H1 — 1st Half 17:00:00 – 18:59:59",
+  "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 19:00:00 – 20:29:59",
+  "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 20:59:59",
+  "UK_H2":    "UK_H2 — 2nd Half 21:00:00 – 21:29:59",
+  "US_H1":    "US_H1 — 1st Half 21:30:00 – 22:59:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
+  "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 00:00:00 – 01:29:59",
+  "US_H2":    "US_H2 — 2nd Half 01:30:00 – 02:59:59",
+  "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 03:00:00 – 03:59:59",
+};
+
+/** UK DST only — UK sessions shift 1h earlier; US stays on winter schedule (UTC+8). */
+const SESSION_VERBOSE_UK_DST: Readonly<Record<string, string>> = {
+  "UK_PRE":   "UK_PRE — Pre UK Warm-up 15:00:00 – 15:59:59",
+  "UK_H1":    "UK_H1 — 1st Half 16:00:00 – 17:59:59",
+  "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 18:00:00 – 19:59:59",
+  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 21:29:59",
+  "US_PRE":   "US_PRE — Pre US Warm-up 21:30:00 – 21:59:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 22:00:00 – 22:29:59",
+  "US_H1":    "US_H1 — 1st Half 22:30:00 – 00:59:59",
+  "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 01:00:00 – 02:29:59",
+  "US_H2":    "US_H2 — 2nd Half 02:30:00 – 03:59:59",
+  "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 04:00:00 – 04:59:59",
+};
+
+/** Both DST — UK sessions shift 1h earlier (BST); US sessions follow US_DST boundaries.
+ *  UK_TP_H2 stays at 23:00 (same slot as US_DST) so US_H1 and US_TP_H1 are unaffected. */
+const SESSION_VERBOSE_BOTH_DST: Readonly<Record<string, string>> = {
+  "UK_PRE":   "UK_PRE — Pre UK Warm-up 15:00:00 – 15:59:59",
+  "UK_H1":    "UK_H1 — 1st Half 16:00:00 – 17:59:59",
+  "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 18:00:00 – 19:59:59",
+  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 20:29:59",
+  "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 21:29:59",
+  "US_H1":    "US_H1 — 1st Half 21:30:00 – 22:59:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
+  "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 00:00:00 – 01:29:59",
+  "US_H2":    "US_H2 — 2nd Half 01:30:00 – 02:59:59",
+  "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 03:00:00 – 03:59:59",
+};
+
+/**
+ * Returns the correct verbose session label for a given session code and UTC
+ * timestamp, selecting the right DST variant based on whether US and/or UK DST
+ * is active at that moment.
+ *
+ * Asia and market-closed sessions are DST-invariant and always return from the
+ * common table. UK/US session labels are selected from the appropriate variant.
+ */
+function getSessionVerboseLabel(session: string, timestampMs: number): string {
+  const common = SESSION_VERBOSE_COMMON[session];
+  if (common !== undefined) return common;
+
+  const usDst = isUsDst(timestampMs);
+  const ukDst = isUkDst(timestampMs);
+
+  const table = (usDst && ukDst) ? SESSION_VERBOSE_BOTH_DST
+              : usDst             ? SESSION_VERBOSE_US_DST
+              : ukDst             ? SESSION_VERBOSE_UK_DST
+              :                     SESSION_VERBOSE_STD;
+
+  return table[session] ?? session;
+}
 
 /**
  * Maps raw MoveScore code to the verbose label written in the Google Sheet.
@@ -179,6 +256,13 @@ export class BehaviorAnalyzer {
         `(${outcomeResult.resolvedOutcomeQuality.replace("MS_", "").toLowerCase()})${tOutcomeStr}`;
     }
 
+    // Resolve the first interaction candle's timestamp for DST-aware label lookup.
+    // Falls back to cycleStartUtcMs for PD_NONE rows (session will be "N/A").
+    const firstInteractTs: number =
+      interactResult.firstInteractionCandleIndex !== -1
+        ? (input.allCandles15m[interactResult.firstInteractionCandleIndex]?.timeUtcMs ?? input.cycleStartUtcMs)
+        : input.cycleStartUtcMs;
+
     return {
       entryDate: cycleDateStr,
       uid: uidStr,
@@ -193,7 +277,7 @@ export class BehaviorAnalyzer {
       previousDayLevel: interactResult.previousDayLevel,
       twoCandleBehavior: interactResult.twoCandleBehavior,
       firstInteractionTime: interactResult.firstInteractionTime,
-      firstInteractionSession: SESSION_VERBOSE[interactResult.firstInteractionSession] ?? interactResult.firstInteractionSession,
+      firstInteractionSession: getSessionVerboseLabel(interactResult.firstInteractionSession, firstInteractTs),
       firstInteractionSessionTimeMode: interactResult.firstInteractionSessionTimeMode,
       entryPrice: "",
       leverage: "",

@@ -49,11 +49,14 @@ export type AddSheetRequest = { addSheet: { properties: { title: string; gridPro
 export type BatchUpdateRequest = { spreadsheetId: string; requestBody: { requests: AddSheetRequest[] } };
 export type UpdateRequest = { spreadsheetId: string; range: string; valueInputOption: string; requestBody: { values: string[][] } };
 
+export type SheetsValuesGetResponse = { data: { values?: string[][] } };
+
 export type SheetsClient = {
   spreadsheets: {
     get: (params: any, options?: any) => Promise<GetResponse>;
     batchUpdate: (params: any, options?: any) => Promise<unknown>;
     values: {
+      get: (params: any, options?: any) => Promise<SheetsValuesGetResponse>;
       update: (params: any, options?: any) => Promise<unknown>;
       clear: (params: any, options?: any) => Promise<unknown>;
       append: (params: any, options?: any) => Promise<unknown>;
@@ -174,6 +177,77 @@ export class BehaviorSheetsReporter {
       }
     } catch (error) {
       console.error("[BehaviorSheetsReporter] bulkWrite error:", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  /**
+   * Reads column E (the "Date (dd/mm/yyyy)" field) and returns the last data row's date
+   * as a "YYYY-MM-DD" string, or null if the sheet has no data rows yet.
+   * Used to determine the start date for incremental backfill runs.
+   */
+  async readLastRowDate(): Promise<string | null> {
+    try {
+      await this.ensureTab();
+      const response = await this.sheetsClient.spreadsheets.values.get({
+        spreadsheetId: this.options.sheetId,
+        // Column E = date field (dd/mm/yyyy). Skip row 1 (header).
+        range: `${this.options.tabName}!E2:E`,
+        majorDimension: "COLUMNS",
+      });
+      const col = response.data.values?.[0];
+      if (col === undefined || col.length === 0) {
+        return null;
+      }
+      // Find the last non-empty cell.
+      let lastVal: string | undefined;
+      for (let i = col.length - 1; i >= 0; i--) {
+        const v = col[i];
+        if (typeof v === "string" && v.trim().length > 0) {
+          lastVal = v.trim();
+          break;
+        }
+      }
+      if (lastVal === undefined) {
+        return null;
+      }
+      // Parse "dd/mm/yyyy" → "YYYY-MM-DD".
+      const parts = lastVal.split("/");
+      if (parts.length !== 3) {
+        return null;
+      }
+      const [dd, mm, yyyy] = parts;
+      if (dd === undefined || mm === undefined || yyyy === undefined) {
+        return null;
+      }
+      return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    } catch (err) {
+      console.error("[BehaviorSheetsReporter] readLastRowDate error:", err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  }
+
+  /** Appends multiple rows without clearing the sheet. Used for incremental daily updates. */
+  async appendRows(rows: readonly BehaviorRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    try {
+      await this.ensureTab();
+      const batchSize = 50;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const chunk = rows.slice(i, i + batchSize).map(r => this.rowToArray(r));
+        await this.sheetsClient.spreadsheets.values.append({
+          spreadsheetId: this.options.sheetId,
+          range: `${this.options.tabName}!A2:AZ`,
+          valueInputOption: "RAW",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: chunk },
+        });
+        if (i + batchSize < rows.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      console.error("[BehaviorSheetsReporter] appendRows error:", error instanceof Error ? error.message : String(error));
       throw error;
     }
   }

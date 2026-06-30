@@ -175,6 +175,10 @@ export async function fetchBinanceCandles(args: Readonly<{
       if (data.length < 1000) {
         break;
       }
+
+      // Respect Binance rate limits (1200 weight/min, each kline request = 2 weight).
+      // 300ms delay ≈ 200 req/min at weight 2 = 400 weight/min — well under the limit.
+      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown fetch error";
       throw new Error(`Failed to fetch Binance data: ${message}`);

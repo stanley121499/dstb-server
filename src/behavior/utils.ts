@@ -132,16 +132,16 @@ export function isUkDst(timestampMs: number): boolean {
  * 17:00 UK_H1   17:00 UK_H1     16:00 UK_H1      16:00 UK_H1
  * 19:00 UK_TP_H1 19:00 UK_TP_H1 18:00 UK_TP_H1   18:00 UK_TP_H1
  * 21:00 UK_H2   20:30 US_PRE*   20:00 UK_H2      20:00 UK_H2
- * 21:30 US_PRE  21:00 UK_H2*    21:30 US_PRE      20:30 US_PRE
+ * 21:30 US_PRE  21:00 UK_H2*    21:30 US_PRE     20:30 US_PRE
  * 22:30 US_H1   21:30 US_H1     22:00 UK_TP_H2*  21:30 US_H1
- * 23:00 UK_TP_H2 22:30 UK_H2?  22:30 US_H1      22:00 UK_TP_H2
- *  → US_H1 wins 21:30+ not UK_H2
- * 23:00 UK_TP_H2                23:00 US_H1 cont  23:00 US_TP_H1
- * 00:00 US_H1   00:00 US_TP_H1  00:00 US_H1 cont  00:00 US_TP_H1 cont
- * 01:00 US_TP_H1 01:30 US_H2    01:00 US_TP_H1   01:30 US_H2
- * 02:30 US_H2   03:00 US_TP_H2  02:30 US_H2      03:00 US_TP_H2
- * 04:00 US_TP_H2                04:00 US_TP_H2
+ * 23:00 UK_TP_H2 23:00 UK_TP_H2 22:30 US_H1      23:00 UK_TP_H2
+ * 00:00 US_H1   00:00 US_TP_H1  23:00 US_H1 cont 00:00 US_TP_H1
+ * 01:00 US_TP_H1 01:30 US_H2   00:00 US_H1 cont  01:30 US_H2
+ * 02:30 US_H2   03:00 US_TP_H2  01:00 US_TP_H1   03:00 US_TP_H2
+ * 04:00 US_TP_H2                02:30 US_H2
+ *                                04:00 US_TP_H2
  *
+ * BOTH_DST: US sessions use US_DST boundaries; UK_TP_H2 stays at 23:00.
  * (*) See inline comments for overlap resolution.
  */
 export function classifySession(timestampMs: number): MarketSession {
@@ -246,28 +246,21 @@ function classifySessionUkDst(t: number): MarketSession {
 }
 
 /**
- * BOTH DST — UK and US both shift 1h earlier (UTC+8).
- *   UK: UK_PRE→15:00  UK_H1→16:00  UK_TP_H1→18:00  UK_H2→20:00  UK_TP_H2→22:00
- *   US: US_PRE→20:30  US_H1→21:30  US_TP_H1→23:00  US_H2→01:30  US_TP_H2→03:00
- * Overlap resolution (same rule — most recently started wins):
- *   20:00–20:29 → UK_H2      (UK_H2 starts 20:00; US_PRE not until 20:30)
- *   20:30–21:29 → US_PRE     (US_PRE starts 20:30 — newer than UK_H2 20:00 → wins)
- *   21:30–21:59 → US_H1      (US_H1 starts 21:30 — newer than US_PRE 20:30 → wins)
- *   22:00–22:59 → UK_TP_H2   (UK_TP_H2 starts 22:00 — newer than US_H1 21:30 → wins)
- *   23:00–01:29 → US_TP_H1   (US_TP_H1 DST starts 23:00 — newer than UK_TP_H2 22:00 → wins)
- *   01:30–02:59 → US_H2
- *   03:00–03:59 → US_TP_H2
+ * BOTH DST — UK sessions shift 1h earlier (BST); US sessions follow US_DST boundaries.
+ *   UK: UK_PRE→15:00  UK_H1→16:00  UK_TP_H1→18:00  UK_H2→20:00
+ *   US: US_PRE→20:30  US_H1→21:30  UK_TP_H2→23:00  US_TP_H1→00:00  US_H2→01:30  US_TP_H2→03:00
+ * US_TP_H1 follows the US_DST start time (00:00) regardless of UK DST state.
+ * UK_TP_H2 sits at 23:00 (same slot as US_DST) so US_H1 and US_TP_H1 are unaffected.
  */
 function classifySessionBothDst(t: number): MarketSession {
   if (t >= 1500 && t <= 1559) return "UK_PRE";
   if (t >= 1600 && t <= 1759) return "UK_H1";
   if (t >= 1800 && t <= 1959) return "UK_TP_H1";
-  if (t >= 2000 && t <= 2029) return "UK_H2";     // UK alone before US_PRE at 20:30
-  if (t >= 2030 && t <= 2129) return "US_PRE";    // incoming at 20:30
-  if (t >= 2130 && t <= 2159) return "US_H1";     // incoming at 21:30
-  if (t >= 2200 && t <= 2259) return "UK_TP_H2";  // incoming at 22:00
-  if (t >= 2300 && t <= 2359) return "US_TP_H1";  // incoming at 23:00 (DST)
-  if (t >= 0    && t <= 129)  return "US_TP_H1";  // continues 00:00–01:29
+  if (t >= 2000 && t <= 2029) return "UK_H2";
+  if (t >= 2030 && t <= 2129) return "US_PRE";
+  if (t >= 2130 && t <= 2259) return "US_H1";     // 21:30–22:59 (same as US_DST)
+  if (t >= 2300 && t <= 2359) return "UK_TP_H2";  // 23:00–23:59 (same slot as US_DST)
+  if (t >= 0    && t <= 129)  return "US_TP_H1";  // 00:00–01:29 (same as US_DST)
   if (t >= 130  && t <= 259)  return "US_H2";
   if (t >= 300  && t <= 359)  return "US_TP_H2";
   return "N/A";
