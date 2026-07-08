@@ -14,7 +14,7 @@ import type { SupabaseStateStore } from "../core/SupabaseStateStore.js";
 const startedAtMs = Date.now();
 
 /**
- * HTTP GET /health plus Phase 5–6 POST /behavior/* (when BEHAVIOR_API_SECRET is set).
+ * HTTP GET/HEAD /health plus Phase 5–6 POST /behavior/* (when BEHAVIOR_API_SECRET is set).
  */
 function startHttpServer(args: Readonly<{
   port: number;
@@ -26,7 +26,13 @@ function startHttpServer(args: Readonly<{
     typeof process.env["BEHAVIOR_API_SECRET"] === "string" ? process.env["BEHAVIOR_API_SECRET"].trim() : "";
 
   const server = http.createServer((req, res) => {
-    if (req.url === "/health" && req.method === "GET") {
+    const isHealthPath = req.url === "/health" || req.url?.startsWith("/health?") === true;
+    if (isHealthPath && (req.method === "GET" || req.method === "HEAD")) {
+      if (req.method === "HEAD") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end();
+        return;
+      }
       void (async () => {
         try {
           const body = await args.getHealthJson();
