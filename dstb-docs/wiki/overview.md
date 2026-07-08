@@ -1,8 +1,8 @@
 ---
 title: "DSTB Server — wiki overview"
 type: overview
-updated: 2026-04-08
-sources: 6
+updated: 2026-07-08
+sources: 7
 tags: [dstb, overview]
 ---
 
@@ -40,7 +40,7 @@ The legacy index table in `raw/docs/README.md` still lists numbered doc aliases 
 
 ## Forward-looking plans (v3) and phased delivery
 
-Roadmap: `raw/2026-04-07-*.md` → [[synthesis/v3-planning-document-set|v3 planning document set]], [[concepts/supabase-v3-migration|Supabase v3 migration]]. **Phase 1** (Postgres, bot server, Realtime, `bot_logs`): [[sources/deploy-runtime-supabase-notes|deploy/runtime]], [[sources/bot-logs-gap-and-integration-plan|bot_logs]]. **Phase 2** (dashboard): [[sources/dashboard-phase2-status|status]], [[entities/dstb-dashboard|entity]]. **Phase 3** (trade detail + analytics): [[sources/phase3-implementation-summary|implementation summary]]; **ops:** [[sources/bot-heartbeat-vs-candle-interval|heartbeat vs bar interval]] (long-interval bots need chunked sleep for `last_heartbeat`). **Phase 6** (environment pipeline + backtest + logs + optional LLM): [[entities/dstb-dashboard|dashboard entity]] (routes); **multi-timeframe live bots** gap: [[concepts/multi-timeframe-bots-gap|multi-timeframe bots gap]]. **E2E backlog:** [[sources/e2e-testing-v3-backlog|E2E testing v3 backlog]]. **Post–Phase 6 polish** (richer spec UX): [[concepts/post-phases-dashboard-polish|polish concept]], [[sources/post-phases-polish-backlog|backlog source]]. `raw/docs/` may still describe SQLite-first flows in places.
+Roadmap: `raw/2026-04-07-*.md` → [[synthesis/v3-planning-document-set|v3 planning document set]], [[concepts/supabase-v3-migration|Supabase v3 migration]]. **Phase 1** (Postgres, bot server, Realtime, `bot_logs`): [[sources/deploy-runtime-supabase-notes|deploy/runtime]], [[sources/bot-logs-gap-and-integration-plan|bot_logs]]. **Phase 2** (dashboard): [[sources/dashboard-phase2-status|status]], [[entities/dstb-dashboard|entity]]. **Phase 3** (trade detail + analytics): [[sources/phase3-implementation-summary|implementation summary]]; **ops:** [[sources/bot-heartbeat-vs-candle-interval|heartbeat vs bar interval]] (long-interval bots need chunked sleep for `last_heartbeat`). **Phase 6** (environment pipeline + backtest + logs + optional LLM): [[entities/dstb-dashboard|dashboard entity]] (routes); **multi-timeframe live bots** gap: [[concepts/multi-timeframe-bots-gap|multi-timeframe bots gap]]. **E2E backlog:** [[sources/e2e-testing-v3-backlog|E2E testing v3 backlog]]. **Post–Phase 6 polish** (richer spec UX): [[concepts/post-phases-dashboard-polish|polish concept]], [[sources/post-phases-polish-backlog|backlog source]]. **S2 behavior Sheets nightly ops (Render):** [[concepts/behavior-backtest-daily-ops|behavior backtest daily ops]], [[sources/behavior-backtest-render-scheduler|source summary]] (2026-06-30). `raw/docs/` may still describe SQLite-first flows in places.
 
 ## Next steps for the wiki
 

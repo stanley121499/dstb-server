@@ -1,7 +1,7 @@
 ---
 title: "Entity — DSTB trading bot (product)"
 type: entity
-updated: 2026-04-13
+updated: 2026-07-08
 sources: 4
 tags: [dstb, product]
 ---
@@ -21,8 +21,9 @@ Algorithmic crypto trading: multiple strategies as plugins, live or paper execut
 - **Strategies:** `src/strategies/` — plugin implementations
 - **Backtest:** `src/backtest/`
 - **CLI:** `src/cli/`
-- **Server:** `src/server/` — BotManager, health, Realtime (with Supabase)
+- **Server:** `src/server/` — BotManager, health, Realtime (with Supabase), **S2 behavior backtest scheduler** ([[../concepts/behavior-backtest-daily-ops|daily ops]])
 - **Monitoring:** `src/monitoring/`
+- **Behavior (S2 Sheets):** `src/behavior/` — analyzer, `runBehaviorBacktest`, `BehaviorSheetsReporter`; scheduled via `behaviorBacktestJob.ts` on Render
 
 ## Bot status lifecycle (post 2026-04-13 fix)
 
@@ -50,6 +51,14 @@ Root cause: `TelegramAlerter.startPolling()` used `void this.pollOnce()` inside 
 Root cause: same server crash loop. Each restart ran `reconcilePositions()` → created DB position → `syncPositionWithExchange()` saw exchange flat (API lag) → closed it. Fix: reconcile grace period (above) + pre-insert guard in `createPosition`.
 
 → See [[../sources/live-smoke-test-bugs-and-ux-fixes|source summary]] for full investigation details.
+
+## S2 behavior backtest scheduler (Render, 2026-06-30)
+
+Nightly Google Sheets backtest for Darren's S2 behavior tab runs **inside the web server** — see [[../concepts/behavior-backtest-daily-ops|behavior backtest daily ops]] and [[../sources/behavior-backtest-render-scheduler|source summary]].
+
+- **Entry:** `src/server/behaviorBacktestJob.ts` → `runBehaviorBacktest()`
+- **Schedule:** startup + midnight GMT+8; `BEHAVIOR_BACKTEST_DISABLED=true` to opt out
+- **Incremental:** reads last sheet date, appends missing rows (avoids Binance rate-limit bans from full re-fetch)
 
 ## Sources
 

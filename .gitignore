@@ -43,6 +43,10 @@ optimization-results/
 # Google Service Account key (NEVER commit this!)
 google-service-account.json
 
+# Local Python behavior populate scripts (Darren alternative; not part of Node server)
+scripts/
+scripts.rar
+
 
 
 

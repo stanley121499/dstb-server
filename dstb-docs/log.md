@@ -81,3 +81,9 @@ Append-only timeline. Newest entries at the **bottom** (or top — stay consiste
 - **Question:** Root cause and fix for ETH Live Bot v3 crash loop and ORB BTC 15m reconcile storm.
 - **Output filed:** updated `wiki/sources/live-smoke-test-bugs-and-ux-fixes.md`, `wiki/entities/dstb-trading-bot.md`
 - **Notes:** Both issues traced to a single root cause — `TelegramAlerter.startPolling()` used `void this.pollOnce()` without `.catch()`; Node.js 22 treats unhandled rejections as fatal, crashing the entire server every ~1 min when Telegram API was unreachable (ETIMEDOUT). Fix: `.catch()` on `pollOnce()`. Reconcile storm was a symptom of the crash loop (each restart created + immediately closed a DB position via exchange API lag). Additional guards added: 60s reconcile grace period in `syncPositionWithExchange` + pre-insert uniqueness check in `createPosition`. Migration `20260414120000_positions_created_at.sql` adds `created_at` to `positions`.
+
+## [2026-07-08] ingest | Behavior backtest Render scheduler + incremental Google Sheets
+
+- **Raw:** `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md`
+- **Wiki:** added `wiki/sources/behavior-backtest-render-scheduler.md`, `wiki/concepts/behavior-backtest-daily-ops.md`; updated `wiki/entities/dstb-trading-bot.md`, `wiki/overview.md`, `index.md`
+- **Notes:** Canonical record of Jun 2026 chat work — Render in-process scheduler (midnight GMT+8), incremental `readLastRowDate`/`appendRows`, Binance throttle, Singapore region, GH Actions manual-only, start date 2021-11-07, free-tier spin-down watchlist; `scripts/` gitignored.

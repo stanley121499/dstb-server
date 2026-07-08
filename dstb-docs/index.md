@@ -22,6 +22,7 @@
 - [[wiki/sources/phase4-behavior-implementation|Phase 4 behavior (Supabase) implementation]] — `raw/2026-04-07-phase4-behavior-supabase-implementation.md`
 - [[wiki/sources/phase5-behavior-implementation|Phase 5 behavior editor + self-service analysis]] — `raw/2026-04-07-phase5-behavior-editor-implementation.md`
 - [[wiki/sources/live-smoke-test-bugs-and-ux-fixes|Live smoke test — bugs and UX fixes (2026-04-13)]] — `raw/2026-04-13-live-smoke-test-bugs-and-ux-fixes.md`
+- [[wiki/sources/behavior-backtest-render-scheduler|Behavior backtest Render scheduler + incremental Sheets]] — `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md`
 
 ## Entities
 
@@ -34,6 +35,7 @@
 - [[wiki/concepts/supabase-v3-migration|Supabase + dashboard migration (v3 plan)]]
 - [[wiki/concepts/post-phases-dashboard-polish|Post-phases dashboard polish]] — after Phase 6 / polish sprint
 - [[wiki/concepts/multi-timeframe-bots-gap|Multi-timeframe live bots (Phase 6 gap)]] — engine note vs phase plan
+- [[wiki/concepts/behavior-backtest-daily-ops|Behavior backtest daily ops]] — Render midnight GMT+8 scheduler, incremental Google Sheets
 
 ## Synthesis
 
@@ -43,6 +45,7 @@
 
 - **Full tree:** `raw/docs/` — all former `docs/` content (markdown + Bitunix HTML exports + reports)
 - **Planning + ops (v3):** `raw/2026-04-07-*.md` — roadmap, deploy/runtime, bot_logs, **dashboard Phase 2 status**, **post-phases polish**, **Phase 3 summary**, **Phase 4 behavior implementation**, **Phase 5 behavior editor**, **heartbeat ops**, **E2E backlog**; CSVs at `raw/3.0_Behavior_Backtest_01*.csv`
+- **Behavior Sheets ops (2026-06-30):** `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md` — Render scheduler, incremental Google Sheets, Binance ops
 - **New drops:** `raw/` (see `raw/README.md`)
 
 ---
