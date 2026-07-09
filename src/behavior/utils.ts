@@ -8,6 +8,16 @@ export function toUtc8(timestampMs: number): DateTime {
   return DateTime.fromMillis(timestampMs).setZone("Asia/Singapore");
 }
 
+/** Returns today's calendar date as "YYYY-MM-DD" in GMT+8 (Asia/Singapore). */
+export function todayGmt8Iso(): string {
+  return toUtc8(Date.now()).toFormat("yyyy-MM-dd");
+}
+
+/** Returns yesterday's calendar date as "YYYY-MM-DD" in GMT+8. */
+export function yesterdayGmt8Iso(): string {
+  return toUtc8(Date.now()).minus({ days: 1 }).toFormat("yyyy-MM-dd");
+}
+
 /**
  * Returns "H:mm:ss" string from a UTC timestamp (ms), in UTC+8.
  * Uses single-digit hours (e.g. "8:00:00" not "08:00:00") to match Darren's format.

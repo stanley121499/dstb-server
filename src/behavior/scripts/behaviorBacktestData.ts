@@ -1,5 +1,5 @@
 import { fetchBinanceCandles } from "../../data/binanceDataSource.js";
-import { toDateString } from "../utils.js";
+import { toDateString, todayGmt8Iso } from "../utils.js";
 import type { Candle, DailyCycleInput } from "../types.js";
 
 function subtractDays(isoDate: string, days: number): string {
@@ -77,7 +77,7 @@ export type BehaviorBacktestRange = Readonly<{
  */
 export function readBehaviorBacktestRangeFromEnv(): BehaviorBacktestRange {
   const backtestStart = process.env.BEHAVIOR_BACKTEST_START ?? "2021-11-07";
-  const backtestEnd = process.env.BEHAVIOR_BACKTEST_END ?? new Date().toISOString().slice(0, 10);
+  const backtestEnd = process.env.BEHAVIOR_BACKTEST_END ?? todayGmt8Iso();
   const pair = process.env.BEHAVIOR_PAIR ?? "BTC-USD";
   return { backtestStart, backtestEnd, pair };
 }

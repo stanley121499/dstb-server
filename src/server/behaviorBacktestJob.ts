@@ -40,7 +40,7 @@ function msUntilNextMidnightGmt8(): number {
  *
  * Controlled via env vars read by `runBehaviorBacktest`:
  *   BEHAVIOR_BACKTEST_START  (default "2024-11-07" — set this on Render)
- *   BEHAVIOR_BACKTEST_END    (default today UTC — correct for daily refresh)
+ *   BEHAVIOR_BACKTEST_END    (default today GMT+8 — aligns with midnight scheduler)
  *   BEHAVIOR_PAIR            (default "BTC-USD")
  *
  * Returns a cleanup function that cancels the pending timeout (call on SIGTERM).
