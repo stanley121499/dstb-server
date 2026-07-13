@@ -42,24 +42,53 @@ const HEADER_ROW = [
 ];
 
 // Reusing types from GoogleSheetsReporter where applicable
-export type SheetProperties = { title?: string };
-export type SheetData = { properties?: SheetProperties };
+export type SheetProperties = { title?: string; sheetId?: number };
+export type SheetGridRange = {
+  sheetId?: number;
+  startRowIndex?: number;
+  endRowIndex?: number;
+  startColumnIndex?: number;
+  endColumnIndex?: number;
+};
+/** Basic (toolbar) filter — UI-only; Values API still sees all rows. */
+export type BasicFilter = {
+  range?: SheetGridRange;
+  sortSpecs?: ReadonlyArray<Record<string, unknown>>;
+  filterSpecs?: ReadonlyArray<Record<string, unknown>>;
+};
+export type SheetData = { properties?: SheetProperties; basicFilter?: BasicFilter };
 export type GetResponse = { data: { sheets?: SheetData[] } };
 export type AddSheetRequest = { addSheet: { properties: { title: string; gridProperties?: { frozenRowCount?: number } } } };
-export type BatchUpdateRequest = { spreadsheetId: string; requestBody: { requests: AddSheetRequest[] } };
+export type ClearBasicFilterRequest = { clearBasicFilter: { sheetId: number } };
+export type SetBasicFilterRequest = { setBasicFilter: { filter: BasicFilter } };
+export type BatchUpdateBodyRequest = AddSheetRequest | ClearBasicFilterRequest | SetBasicFilterRequest;
+export type BatchUpdateRequest = { spreadsheetId: string; requestBody: { requests: BatchUpdateBodyRequest[] } };
 export type UpdateRequest = { spreadsheetId: string; range: string; valueInputOption: string; requestBody: { values: string[][] } };
 
 export type SheetsValuesGetResponse = { data: { values?: string[][] } };
 
 export type SheetsClient = {
   spreadsheets: {
-    get: (params: any, options?: any) => Promise<GetResponse>;
-    batchUpdate: (params: any, options?: any) => Promise<unknown>;
+    get: (params: {
+      spreadsheetId: string;
+      fields?: string;
+    }) => Promise<GetResponse>;
+    batchUpdate: (params: BatchUpdateRequest) => Promise<unknown>;
     values: {
-      get: (params: any, options?: any) => Promise<SheetsValuesGetResponse>;
-      update: (params: any, options?: any) => Promise<unknown>;
-      clear: (params: any, options?: any) => Promise<unknown>;
-      append: (params: any, options?: any) => Promise<unknown>;
+      get: (params: {
+        spreadsheetId: string;
+        range: string;
+        majorDimension?: string;
+      }) => Promise<SheetsValuesGetResponse>;
+      update: (params: UpdateRequest) => Promise<unknown>;
+      clear: (params: { spreadsheetId: string; range: string }) => Promise<unknown>;
+      append: (params: {
+        spreadsheetId: string;
+        range: string;
+        valueInputOption: string;
+        insertDataOption?: string;
+        requestBody: { values: string[][] };
+      }) => Promise<unknown>;
     };
   };
 };
@@ -152,27 +181,22 @@ export class BehaviorSheetsReporter {
         requestBody: { values: [HEADER_ROW] }
       });
 
-      const chunkedRows: string[][][] = [];
+      // Write at explicit rows (avoid values.append table-detection with empty col A).
       const batchSize = 50;
+      let nextRow = 2;
       for (let i = 0; i < rows.length; i += batchSize) {
-        const chunk = rows.slice(i, i + batchSize).map(r => this.rowToArray(r));
-        chunkedRows.push(chunk);
-      }
-
-      for (let i = 0; i < chunkedRows.length; i++) {
-        const batch = chunkedRows[i];
-        if (!batch || batch.length === 0) continue;
-
-        await this.sheetsClient.spreadsheets.values.append({
+        const batch = rows.slice(i, i + batchSize).map((r) => this.rowToArray(r));
+        if (batch.length === 0) continue;
+        const endRow = nextRow + batch.length - 1;
+        await this.sheetsClient.spreadsheets.values.update({
           spreadsheetId: this.options.sheetId,
-          range: `${this.options.tabName}!A2:AZ`,
+          range: `${this.options.tabName}!A${nextRow}:AZ${endRow}`,
           valueInputOption: "RAW",
-          insertDataOption: "INSERT_ROWS",
-          requestBody: { values: batch }
+          requestBody: { values: batch },
         });
-
-        if (i < chunkedRows.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        nextRow = endRow + 1;
+        if (i + batchSize < rows.length) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
     } catch (error) {
@@ -181,12 +205,28 @@ export class BehaviorSheetsReporter {
     }
   }
 
+  /** Short id for logs so we can confirm which spreadsheet Render is writing to. */
+  describeTarget(): string {
+    const id = this.options.sheetId;
+    const tail = id.length > 8 ? id.slice(-8) : id;
+    return `sheet …${tail} tab "${this.options.tabName}"`;
+  }
+
   /**
    * Reads column E (the "Date (dd/mm/yyyy)" field) and returns the last data row's date
    * as a "YYYY-MM-DD" string, or null if the sheet has no data rows yet.
    * Used to determine the start date for incremental backfill runs.
    */
   async readLastRowDate(): Promise<string | null> {
+    const meta = await this.readLastDataRowMeta();
+    return meta === null ? null : meta.isoDate;
+  }
+
+  /**
+   * Last non-empty column-E cell: 1-based sheet row + parsed ISO date.
+   * Row 1 is the header; data starts at row 2.
+   */
+  async readLastDataRowMeta(): Promise<{ rowNumber: number; isoDate: string } | null> {
     try {
       await this.ensureTab();
       const response = await this.sheetsClient.spreadsheets.values.get({
@@ -201,14 +241,16 @@ export class BehaviorSheetsReporter {
       }
       // Find the last non-empty cell.
       let lastVal: string | undefined;
+      let lastIndex = -1;
       for (let i = col.length - 1; i >= 0; i--) {
         const v = col[i];
         if (typeof v === "string" && v.trim().length > 0) {
-          lastVal = v.trim();
+          lastVal = v.trim().replace(/^'/, "");
+          lastIndex = i;
           break;
         }
       }
-      if (lastVal === undefined) {
+      if (lastVal === undefined || lastIndex < 0) {
         return null;
       }
       // Parse "dd/mm/yyyy" → "YYYY-MM-DD".
@@ -220,31 +262,61 @@ export class BehaviorSheetsReporter {
       if (dd === undefined || mm === undefined || yyyy === undefined) {
         return null;
       }
-      return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+      return {
+        rowNumber: lastIndex + 2,
+        isoDate: `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`,
+      };
     } catch (err) {
-      console.error("[BehaviorSheetsReporter] readLastRowDate error:", err instanceof Error ? err.message : String(err));
+      console.error("[BehaviorSheetsReporter] readLastDataRowMeta error:", err instanceof Error ? err.message : String(err));
       return null;
     }
   }
 
-  /** Appends multiple rows without clearing the sheet. Used for incremental daily updates. */
+  /**
+   * Writes rows at the true bottom of the tab via values.update (not values.append).
+   *
+   * Why not append:
+   * - Empty column A + active basic filters make Sheets "table detection" insert
+   *   mid-sheet (API still returns success; last date never advances).
+   * - values.get / values.update use the full grid and ignore filter visibility.
+   */
   async appendRows(rows: readonly BehaviorRow[]): Promise<void> {
     if (rows.length === 0) return;
     try {
       await this.ensureTab();
+      const tabState = await this.readTabState();
+      if (tabState !== null && tabState.basicFilter !== undefined) {
+        console.log(
+          `[BehaviorSheetsReporter] Basic filter is ON (${this.describeTarget()}) — writing by absolute row (filter does not hide data from the API).`
+        );
+      }
+
+      const meta = await this.readLastDataRowMeta();
+      let nextRow = meta === null ? 2 : meta.rowNumber + 1;
       const batchSize = 50;
+      let lastWrittenRow = nextRow - 1;
       for (let i = 0; i < rows.length; i += batchSize) {
-        const chunk = rows.slice(i, i + batchSize).map(r => this.rowToArray(r));
-        await this.sheetsClient.spreadsheets.values.append({
+        const chunk = rows.slice(i, i + batchSize).map((r) => this.rowToArray(r));
+        const endRow = nextRow + chunk.length - 1;
+        await this.sheetsClient.spreadsheets.values.update({
           spreadsheetId: this.options.sheetId,
-          range: `${this.options.tabName}!A2:AZ`,
+          range: `${this.options.tabName}!A${nextRow}:AZ${endRow}`,
           valueInputOption: "RAW",
-          insertDataOption: "INSERT_ROWS",
           requestBody: { values: chunk },
         });
+        console.log(
+          `[BehaviorSheetsReporter] Wrote ${chunk.length} row(s) at A${nextRow} (${this.describeTarget()})`
+        );
+        lastWrittenRow = endRow;
+        nextRow = endRow + 1;
         if (i + batchSize < rows.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
+      }
+
+      // Keep Darren's filter criteria, but expand its range to include new rows.
+      if (tabState !== null && tabState.basicFilter !== undefined && lastWrittenRow >= 2) {
+        await this.expandBasicFilterToRow(tabState, lastWrittenRow);
       }
     } catch (error) {
       console.error("[BehaviorSheetsReporter] appendRows error:", error instanceof Error ? error.message : String(error));
@@ -252,22 +324,64 @@ export class BehaviorSheetsReporter {
     }
   }
 
-  /** Append one row. Calls ensureTab() first (idempotent). */
+  /** Append one row at the true bottom of the tab. */
   async appendRow(row: BehaviorRow): Promise<void> {
-    try {
-      await this.ensureTab();
+    await this.appendRows([row]);
+  }
 
-      await this.sheetsClient.spreadsheets.values.append({
-        spreadsheetId: this.options.sheetId,
-        range: `${this.options.tabName}!A:AZ`,
-        valueInputOption: "RAW",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: [this.rowToArray(row)] }
-      });
-    } catch (error) {
-      console.error("[BehaviorSheetsReporter] appendRow error:", error instanceof Error ? error.message : String(error));
-      throw error;
+  /** Numeric sheetId + optional basic filter for the configured tab. */
+  private async readTabState(): Promise<{
+    sheetId: number;
+    basicFilter: BasicFilter | undefined;
+  } | null> {
+    const response = await this.sheetsClient.spreadsheets.get({
+      spreadsheetId: this.options.sheetId,
+      fields: "sheets(properties(sheetId,title),basicFilter)",
+    });
+    const match = response.data.sheets?.find(
+      (sheet) => (sheet.properties?.title ?? "") === this.options.tabName
+    );
+    const sheetId = match?.properties?.sheetId;
+    if (typeof sheetId !== "number") {
+      return null;
     }
+    return { sheetId, basicFilter: match.basicFilter };
+  }
+
+  /**
+   * Re-applies the existing basic filter with endRowIndex covering lastDataRow (1-based).
+   * Does not clear filter criteria — only grows the range so new rows stay in-filter.
+   */
+  private async expandBasicFilterToRow(
+    tabState: { sheetId: number; basicFilter: BasicFilter },
+    lastDataRow1Based: number
+  ): Promise<void> {
+    const existing = tabState.basicFilter;
+    const prevEnd = existing.range?.endRowIndex ?? 0;
+    // endRowIndex is exclusive; row N (1-based) => index N.
+    const neededEnd = lastDataRow1Based;
+    if (prevEnd >= neededEnd) {
+      return;
+    }
+    const nextFilter: BasicFilter = {
+      ...existing,
+      range: {
+        sheetId: tabState.sheetId,
+        startRowIndex: existing.range?.startRowIndex ?? 0,
+        endRowIndex: neededEnd,
+        startColumnIndex: existing.range?.startColumnIndex ?? 0,
+        endColumnIndex: existing.range?.endColumnIndex ?? 52,
+      },
+    };
+    await this.sheetsClient.spreadsheets.batchUpdate({
+      spreadsheetId: this.options.sheetId,
+      requestBody: {
+        requests: [{ setBasicFilter: { filter: nextFilter } }],
+      },
+    });
+    console.log(
+      `[BehaviorSheetsReporter] Expanded basic filter through row ${lastDataRow1Based} (${this.describeTarget()})`
+    );
   }
 
   private rowToArray(row: BehaviorRow): string[] {

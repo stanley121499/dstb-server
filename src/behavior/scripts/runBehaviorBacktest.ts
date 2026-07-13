@@ -30,21 +30,28 @@ export async function main(): Promise<void> {
   let isIncremental = false;
 
   if (!fullRun && reporter !== null) {
-    const lastDate = await reporter.readLastRowDate();
-    if (lastDate !== null) {
+    const lastMeta = await reporter.readLastDataRowMeta();
+    if (lastMeta !== null) {
+      const lastDate = lastMeta.isoDate;
       const nextDay = addOneDay(lastDate);
       const yesterday = yesterdayGmt8Iso();
       if (nextDay > yesterday) {
-        console.log(`✅ Sheet already up to date (last row: ${lastDate}). Nothing to do.`);
+        console.log(
+          `✅ Sheet already up to date (last row ${lastMeta.rowNumber}: ${lastDate}, ${reporter.describeTarget()}). Nothing to do.`
+        );
         return;
       }
       backtestStart = nextDay;
       backtestEnd = yesterday;
       isIncremental = true;
-      console.log(`[behavior-backtest] Incremental run: fetching ${nextDay} → ${yesterday}`);
+      console.log(
+        `[behavior-backtest] Incremental run: fetching ${nextDay} → ${yesterday} (after row ${lastMeta.rowNumber} date ${lastDate}, ${reporter.describeTarget()})`
+      );
     } else {
       backtestStart = envRange.backtestStart;
-      console.log(`[behavior-backtest] Sheet is empty — full backfill from ${backtestStart}`);
+      console.log(
+        `[behavior-backtest] Sheet is empty — full backfill from ${backtestStart} (${reporter.describeTarget()})`
+      );
     }
   } else {
     backtestStart = envRange.backtestStart;
@@ -73,11 +80,19 @@ export async function main(): Promise<void> {
     if (isIncremental) {
       // Append only the new rows — do not clear the sheet.
       await reporter.appendRows(rows);
-      console.log(`✅ Appended ${rows.length} new row(s) to Google Sheets.`);
+      const verify = await reporter.readLastDataRowMeta();
+      console.log(
+        `✅ Appended ${rows.length} new row(s) to Google Sheets (${reporter.describeTarget()}).`
+      );
+      if (verify !== null) {
+        console.log(
+          `[behavior-backtest] Sheet last row after write: row ${verify.rowNumber}, date ${verify.isoDate}`
+        );
+      }
     } else {
       // Full run: clear and rewrite everything, then refresh the dashboard.
       await reporter.bulkWrite(rows);
-      console.log(`✅ Wrote ${rows.length} rows to Google Sheets.`);
+      console.log(`✅ Wrote ${rows.length} rows to Google Sheets (${reporter.describeTarget()}).`);
 
       const dashReporter = BehaviorDashboardReporter.fromEnv();
       await dashReporter.write(rows);
