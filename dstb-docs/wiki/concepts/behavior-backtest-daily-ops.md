@@ -17,7 +17,7 @@ Canonical ops reference for the **S2 behavior backtest → Google Sheets** night
 | **Schedule** | In-process on the Render web service (`npm run start`) — not a separate cron job |
 | **Trigger times** | Server startup + every **midnight GMT+8** |
 | **Analysis** | `npm run behavior:backtest` → `runBehaviorBacktest.ts` |
-| **Output** | Google Sheet tab `S2-BO-BEHAVIOR-BTC` (default) |
+| **Output** | Google Sheet tabs: raw `S2-BO-BEHAVIOR-BTC`, overview `BEHAVIOR-OVERVIEW-DASHBOARD`, audit `BEHAVIOR-SYNC-LOG` |
 
 GitHub Actions workflow exists for **manual** runs only (US runners cannot reach Binance).
 
@@ -25,17 +25,33 @@ GitHub Actions workflow exists for **manual** runs only (US runners cannot reach
 
 | Mode | When | Sheet write |
 |------|------|-------------|
-| **Incremental** | Sheet has data; default nightly path | `appendRows()` — does **not** clear; then refreshes dashboard from **all** sheet rows |
-| **Full** | Empty sheet, `--full` flag, or first deploy | `bulkWrite()` — **clears** then rewrites; refreshes dashboard tab |
-| **Up to date** | Last row date ≥ yesterday | Still refreshes dashboard from the full sheet (heals stale overview) |
+| **Incremental** | Sheet has data; default nightly path | `appendRows()` — does **not** clear; then refreshes dashboard from **all** sheet rows; appends sync-log row |
+| **Full** | Empty sheet, `--full` flag, or first deploy | `bulkWrite()` — **clears** then rewrites; refreshes dashboard tab; appends sync-log row |
+| **Up to date** | Last row date ≥ yesterday | Still refreshes dashboard from the full sheet (heals stale overview); appends sync-log row |
 
 Incremental reads column **E** (`Date dd/mm/yyyy`), parses last row, fetches `(lastDate + 1)` through yesterday.
+
+## Sync log tab (`BEHAVIOR-SYNC-LOG`)
+
+Append-only audit history for Darren’s cross-check. Each successful backtest path appends one row (never clears):
+
+| Col | Field |
+|-----|--------|
+| A | Ran At (GMT+8) |
+| B | Mode (`incremental` / `full` / `up_to_date`) |
+| C | Rows Written |
+| D | Dashboard Refreshed (`YES` / `NO`) |
+| E | Last Raw Date |
+| F | Raw Row Count |
+| G | Notes |
+
+Created automatically if missing (`BehaviorSyncLogReporter`). Optional env: `BEHAVIOR_SYNC_LOG_TAB`.
 
 ## Required Render configuration
 
 - **Region:** Singapore (or other non-US) for Binance API access
 - **Env:** `GOOGLE_SHEETS_ID`, `GOOGLE_SERVICE_ACCOUNT_KEY` (secret file path)
-- **Optional:** `BEHAVIOR_SHEET_TAB`, `BEHAVIOR_BACKTEST_START` (`2021-11-07`), `BEHAVIOR_PAIR` (`BTC-USD`)
+- **Optional:** `BEHAVIOR_SHEET_TAB`, `BEHAVIOR_DASHBOARD_TAB`, `BEHAVIOR_SYNC_LOG_TAB`, `BEHAVIOR_BACKTEST_START` (`2021-11-07`), `BEHAVIOR_PAIR` (`BTC-USD`)
 - **Disable:** `BEHAVIOR_BACKTEST_DISABLED=true`
 
 ## Reliability notes

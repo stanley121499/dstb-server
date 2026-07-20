@@ -17,10 +17,10 @@ S2 behavior backtest runs **in-process on Render** at **midnight GMT+8** (and on
 ## Notable facts (from raw)
 
 - **Scheduler:** `src/server/behaviorBacktestJob.ts` — integrated in `src/server/index.ts`; opt out with `BEHAVIOR_BACKTEST_DISABLED=true`.
-- **Incremental logic:** `runBehaviorBacktest.ts` → `readLastRowDate()` (col E) → fetch gap → `appendRows()` → `readAllBehaviorRows()` + dashboard `write()`; `--full` forces `bulkWrite()` + dashboard refresh.
+- **Incremental logic:** `runBehaviorBacktest.ts` → `readLastRowDate()` (col E) → fetch gap → `appendRows()` → `readAllBehaviorRows()` + dashboard `write()` → sync-log append; `--full` forces `bulkWrite()` + dashboard refresh + sync-log.
 - **GH Actions:** `.github/workflows/behavior-backtest.yml` is **manual only**; daily schedule lives on Render.
 - **Binance:** Singapore Render region required; 300ms pagination delay; nightly incremental = few requests (avoids 418 bans).
-- **Logging:** `console.log` in job for Render stdout; file `Logger` alone is insufficient.
+- **Logging:** `console.log` in job for Render stdout; file `Logger` alone is insufficient; sheet audit tab `BEHAVIOR-SYNC-LOG` (`BehaviorSyncLogReporter`).
 - **Sheet:** 40-column header; `bulkWrite` clears sheet — never used on incremental nightly path.
 - **Free tier:** spin-down caused missed runs (observed 2026-06-19–24); incremental catches up on next successful run.
 
@@ -32,6 +32,7 @@ S2 behavior backtest runs **in-process on Render** at **midnight GMT+8** (and on
 ## Resolved (2026-07-20)
 
 - Overview dashboard no longer refreshes on full runs only — incremental appends and “already up to date” paths recompute `BEHAVIOR-OVERVIEW-DASHBOARD` from the full raw sheet (`readAllBehaviorRows`).
+- Append-only `BEHAVIOR-SYNC-LOG` tab records ran-at (GMT+8), mode, rows written, dashboard refresh, last raw date, and notes after every successful path.
 
 ## Cross-references
 

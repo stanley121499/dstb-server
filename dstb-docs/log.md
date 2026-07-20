@@ -99,3 +99,9 @@ Append-only timeline. Newest entries at the **bottom** (or top — stay consiste
 - **Raw:** none (code fix; prior ops note in `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md`)
 - **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md`, `wiki/sources/behavior-backtest-render-scheduler.md`
 - **Notes:** `BehaviorSheetsReporter.readAllBehaviorRows()` + incremental/`up-to-date` paths call `BehaviorDashboardReporter.write()` so nightly appends no longer leave overview counts stale.
+
+## [2026-07-20] ingest | Behavior sync log tab (BEHAVIOR-SYNC-LOG)
+
+- **Raw:** none (Darren request via chat; ops follow-up to dashboard refresh fix)
+- **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md`, `wiki/sources/behavior-backtest-render-scheduler.md`
+- **Notes:** Added `BehaviorSyncLogReporter`; `runBehaviorBacktest` appends audit rows on incremental / full / up_to_date success paths (ran-at GMT+8, mode, rows written, dashboard refreshed, last raw date, raw row count, notes).
