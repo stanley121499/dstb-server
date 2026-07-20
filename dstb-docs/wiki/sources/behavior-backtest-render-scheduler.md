@@ -1,7 +1,7 @@
 ---
 title: "Source summary — Behavior backtest Render scheduler + incremental Sheets"
 type: source-summary
-updated: 2026-07-08
+updated: 2026-07-20
 sources: 1
 tags: [dstb, behavior, backtest, render, google-sheets, ops]
 ---
@@ -17,7 +17,7 @@ S2 behavior backtest runs **in-process on Render** at **midnight GMT+8** (and on
 ## Notable facts (from raw)
 
 - **Scheduler:** `src/server/behaviorBacktestJob.ts` — integrated in `src/server/index.ts`; opt out with `BEHAVIOR_BACKTEST_DISABLED=true`.
-- **Incremental logic:** `runBehaviorBacktest.ts` → `readLastRowDate()` (col E) → fetch gap → `appendRows()`; `--full` forces `bulkWrite()`.
+- **Incremental logic:** `runBehaviorBacktest.ts` → `readLastRowDate()` (col E) → fetch gap → `appendRows()` → `readAllBehaviorRows()` + dashboard `write()`; `--full` forces `bulkWrite()` + dashboard refresh.
 - **GH Actions:** `.github/workflows/behavior-backtest.yml` is **manual only**; daily schedule lives on Render.
 - **Binance:** Singapore Render region required; 300ms pagination delay; nightly incremental = few requests (avoids 418 bans).
 - **Logging:** `console.log` in job for Render stdout; file `Logger` alone is insufficient.
@@ -26,9 +26,12 @@ S2 behavior backtest runs **in-process on Render** at **midnight GMT+8** (and on
 
 ## Open questions / follow-ups
 
-- Dashboard tab (`BehaviorDashboardReporter`) refreshes on **full** runs only — confirm Darren's expectation for nightly ops.
 - `DEPLOY-RENDER.md` not yet updated with scheduler env vars.
 - Stale comment in `behaviorBacktestJob.ts` (says `2024-11-07`; code default is `2021-11-07`).
+
+## Resolved (2026-07-20)
+
+- Overview dashboard no longer refreshes on full runs only — incremental appends and “already up to date” paths recompute `BEHAVIOR-OVERVIEW-DASHBOARD` from the full raw sheet (`readAllBehaviorRows`).
 
 ## Cross-references
 

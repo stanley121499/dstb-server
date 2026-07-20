@@ -87,3 +87,15 @@ Append-only timeline. Newest entries at the **bottom** (or top — stay consiste
 - **Raw:** `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md`
 - **Wiki:** added `wiki/sources/behavior-backtest-render-scheduler.md`, `wiki/concepts/behavior-backtest-daily-ops.md`; updated `wiki/entities/dstb-trading-bot.md`, `wiki/overview.md`, `index.md`
 - **Notes:** Canonical record of Jun 2026 chat work — Render in-process scheduler (midnight GMT+8), incremental `readLastRowDate`/`appendRows`, Binance throttle, Singapore region, GH Actions manual-only, start date 2021-11-07, free-tier spin-down watchlist; `scripts/` gitignored.
+
+## [2026-07-20] query | Cross-check Darren overview dashboard shortage
+
+- **Question:** Is the ~25-row raw vs BEHAVIOR-OVERVIEW-DASHBOARD gap a missing refresh on incremental runs?
+- **Output filed:** none — ephemeral (wiki already documents full-only refresh)
+- **Notes:** Confirmed in `runBehaviorBacktest.ts`: incremental path calls `appendRows` only; `BehaviorDashboardReporter.write` runs on full/`--full` only. Matches Darren’s missing combo + undercounts.
+
+## [2026-07-20] ingest | Fix incremental overview dashboard refresh
+
+- **Raw:** none (code fix; prior ops note in `raw/2026-06-30-behavior-backtest-render-scheduler-and-incremental-sheets.md`)
+- **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md`, `wiki/sources/behavior-backtest-render-scheduler.md`
+- **Notes:** `BehaviorSheetsReporter.readAllBehaviorRows()` + incremental/`up-to-date` paths call `BehaviorDashboardReporter.write()` so nightly appends no longer leave overview counts stale.

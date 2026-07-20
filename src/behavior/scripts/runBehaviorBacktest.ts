@@ -14,6 +14,18 @@ function addOneDay(isoDate: string): string {
   return new Date(Date.parse(isoDate + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
 }
 
+/**
+ * Rebuilds BEHAVIOR-OVERVIEW-DASHBOARD from every row currently on the raw sheet.
+ * Required after incremental appends so the overview tab does not lag behind
+ * append-only nightly writes (new rows alone are not enough to recompute counts).
+ */
+async function refreshDashboardFromSheet(reporter: BehaviorSheetsReporter): Promise<void> {
+  const allRows = await reporter.readAllBehaviorRows();
+  const dashReporter = BehaviorDashboardReporter.fromEnv();
+  await dashReporter.write(allRows);
+  console.log(`✅ Dashboard tab refreshed from ${allRows.length} sheet row(s).`);
+}
+
 export async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const verbose = process.argv.includes("--verbose");
@@ -37,8 +49,10 @@ export async function main(): Promise<void> {
       const yesterday = yesterdayGmt8Iso();
       if (nextDay > yesterday) {
         console.log(
-          `✅ Sheet already up to date (last row ${lastMeta.rowNumber}: ${lastDate}, ${reporter.describeTarget()}). Nothing to do.`
+          `✅ Sheet already up to date (last row ${lastMeta.rowNumber}: ${lastDate}, ${reporter.describeTarget()}).`
         );
+        // Heal stale overview clusters left behind by older append-only runs.
+        await refreshDashboardFromSheet(reporter);
         return;
       }
       backtestStart = nextDay;
@@ -89,6 +103,8 @@ export async function main(): Promise<void> {
           `[behavior-backtest] Sheet last row after write: row ${verify.rowNumber}, date ${verify.isoDate}`
         );
       }
+      // Recompute overview from the full sheet (new rows alone undercount clusters).
+      await refreshDashboardFromSheet(reporter);
     } else {
       // Full run: clear and rewrite everything, then refresh the dashboard.
       await reporter.bulkWrite(rows);

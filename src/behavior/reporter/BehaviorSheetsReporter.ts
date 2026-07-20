@@ -329,6 +329,44 @@ export class BehaviorSheetsReporter {
     await this.appendRows([row]);
   }
 
+  /**
+   * Reads every data row from the raw behavior tab into {@link BehaviorRow}s.
+   * Used to recompute the overview dashboard after incremental appends without
+   * re-fetching candles. Sheets may omit trailing empty cells — missing cells
+   * become `""`. Meta fields not stored on the sheet (`entryDate`, `uid`, etc.)
+   * are also `""`.
+   */
+  async readAllBehaviorRows(): Promise<BehaviorRow[]> {
+    try {
+      await this.ensureTab();
+      const response = await this.sheetsClient.spreadsheets.values.get({
+        spreadsheetId: this.options.sheetId,
+        range: `${this.options.tabName}!A2:AZ`,
+      });
+      const values = response.data.values ?? [];
+      const rows: BehaviorRow[] = [];
+      for (let i = 0; i < values.length; i++) {
+        const cells = values[i];
+        if (cells === undefined) {
+          continue;
+        }
+        // Skip fully blank rows (gaps from filter edits or accidental clears).
+        const hasContent = cells.some((cell) => typeof cell === "string" && cell.trim().length > 0);
+        if (!hasContent) {
+          continue;
+        }
+        rows.push(this.arrayToRow(cells, i));
+      }
+      return rows;
+    } catch (error) {
+      console.error(
+        "[BehaviorSheetsReporter] readAllBehaviorRows error:",
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
   /** Numeric sheetId + optional basic filter for the configured tab. */
   private async readTabState(): Promise<{
     sheetId: number;
@@ -401,5 +439,71 @@ export class BehaviorSheetsReporter {
       row.htf4hEdge, row.htf4hEdgeLink,
       row.lifecycleCrossedDayBoundary
     ];
+  }
+
+  /**
+   * Inverse of {@link rowToArray}: maps sheet cells (A–AN) back to a BehaviorRow.
+   * Index `i` is the 0-based data-row offset (sheet row = i + 2).
+   */
+  private arrayToRow(cells: readonly string[], i: number): BehaviorRow {
+    const cell = (index: number): string => {
+      const value = cells[index];
+      return typeof value === "string" ? value : "";
+    };
+
+    return {
+      entryDate: cell(4),
+      uid: String(i + 1),
+      tradingViewLink: cell(0),
+      pair: cell(1),
+      day: cell(2),
+      dayOwner: cell(3),
+      date: cell(4),
+      dateOwner: cell(5),
+      asiaRange: cell(6),
+      previousDayLevel: cell(7),
+      twoCandleBehavior: cell(8),
+      firstInteractionTime: cell(9),
+      firstInteractionSession: cell(10),
+      firstInteractionSessionTimeMode: cell(11),
+      entryPrice: cell(12),
+      leverage: cell(13),
+      marginUsed: cell(14),
+      positionSize: cell(15),
+      accountRisk: cell(16),
+      stopLossPrice: cell(17),
+      takeProfitPrice: cell(18),
+      r: cell(19),
+      fees: cell(20),
+      exitPrice: cell(21),
+      exitDateTime: cell(22),
+      grossPnl: cell(23),
+      netPnl: cell(24),
+      decisionBeginType: cell(25),
+      decisionBeginTime: cell(26),
+      decisionOutput: cell(27),
+      decisionConfirmTime: cell(28),
+      failedStatus: cell(29),
+      resolvedDecisionOutput: cell(30),
+      resolvedDecisionStrength: cell(31),
+      resolvedOutcomeDirection: cell(32),
+      moveScoreValue: cell(33),
+      resolvedOutcomeQuality: cell(34),
+      resolvedOutcomeBeginTime: cell(35),
+      outcomePeakTime: cell(36),
+      htf4hEdge: cell(37),
+      htf4hEdgeLink: cell(38),
+      lifecycleCrossedDayBoundary: cell(39),
+      notes: "",
+      win: "",
+      loss: "",
+      winDollar: "",
+      lossDollar: "",
+      inUse: "",
+      month: "",
+      consecutiveWins: "",
+      consecutiveLosses: "",
+      uidLink: "",
+    };
   }
 }

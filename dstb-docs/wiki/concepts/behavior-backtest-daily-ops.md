@@ -1,7 +1,7 @@
 ---
 title: "Concept — Behavior backtest daily ops (Render + Google Sheets)"
 type: concept
-updated: 2026-07-08
+updated: 2026-07-20
 sources: 1
 tags: [dstb, behavior, backtest, render, google-sheets, ops]
 ---
@@ -25,9 +25,9 @@ GitHub Actions workflow exists for **manual** runs only (US runners cannot reach
 
 | Mode | When | Sheet write |
 |------|------|-------------|
-| **Incremental** | Sheet has data; default nightly path | `appendRows()` — does **not** clear |
+| **Incremental** | Sheet has data; default nightly path | `appendRows()` — does **not** clear; then refreshes dashboard from **all** sheet rows |
 | **Full** | Empty sheet, `--full` flag, or first deploy | `bulkWrite()` — **clears** then rewrites; refreshes dashboard tab |
-| **No-op** | Last row date ≥ yesterday | Exit early |
+| **Up to date** | Last row date ≥ yesterday | Still refreshes dashboard from the full sheet (heals stale overview) |
 
 Incremental reads column **E** (`Date dd/mm/yyyy`), parses last row, fetches `(lastDate + 1)` through yesterday.
 
