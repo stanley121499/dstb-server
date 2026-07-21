@@ -65,7 +65,7 @@ const SESSION_VERBOSE_US_DST: Readonly<Record<string, string>> = {
   "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 19:00:00 – 20:29:59",
   "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 20:59:59",
   "UK_H2":    "UK_H2 — 2nd Half 21:00:00 – 21:29:59",
-  "US_H1":    "US_H1 — 1st Half 21:30:00 – 22:59:59",
+  "US_H1":    "US_H1 — 1st Half 21:30:00 – 23:59:59",
   "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
   "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 00:00:00 – 01:29:59",
   "US_H2":    "US_H2 — 2nd Half 01:30:00 – 02:59:59",
@@ -77,25 +77,28 @@ const SESSION_VERBOSE_UK_DST: Readonly<Record<string, string>> = {
   "UK_PRE":   "UK_PRE — Pre UK Warm-up 15:00:00 – 15:59:59",
   "UK_H1":    "UK_H1 — 1st Half 16:00:00 – 17:59:59",
   "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 18:00:00 – 19:59:59",
-  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 21:29:59",
+  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 21:59:59",
   "US_PRE":   "US_PRE — Pre US Warm-up 21:30:00 – 21:59:59",
-  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 22:00:00 – 22:29:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 22:00:00 – 22:59:59",
   "US_H1":    "US_H1 — 1st Half 22:30:00 – 00:59:59",
   "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 01:00:00 – 02:29:59",
   "US_H2":    "US_H2 — 2nd Half 02:30:00 – 03:59:59",
   "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 04:00:00 – 04:59:59",
 };
 
-/** Both DST — UK sessions shift 1h earlier (BST); US sessions follow US_DST boundaries.
- *  UK_TP_H2 stays at 23:00 (same slot as US_DST) so US_H1 and US_TP_H1 are unaffected. */
+/**
+ * Both DST — Darren TABLE2 captions (year/regime-accurate structural windows).
+ * UK_H2 ends 21:59:59; UK_TP_H2 is 22:00–22:59; US_H1 runs through 23:59:59;
+ * US_TP_H2 starts 03:00:00.
+ */
 const SESSION_VERBOSE_BOTH_DST: Readonly<Record<string, string>> = {
   "UK_PRE":   "UK_PRE — Pre UK Warm-up 15:00:00 – 15:59:59",
   "UK_H1":    "UK_H1 — 1st Half 16:00:00 – 17:59:59",
   "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 18:00:00 – 19:59:59",
-  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 20:29:59",
+  "UK_H2":    "UK_H2 — 2nd Half 20:00:00 – 21:59:59",
   "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 21:29:59",
-  "US_H1":    "US_H1 — 1st Half 21:30:00 – 22:59:59",
-  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
+  "US_H1":    "US_H1 — 1st Half 21:30:00 – 23:59:59",
+  "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 22:00:00 – 22:59:59",
   "US_TP_H1": "US_TP_H1 — TP Zone 1st Half 00:00:00 – 01:29:59",
   "US_H2":    "US_H2 — 2nd Half 01:30:00 – 02:59:59",
   "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 03:00:00 – 03:59:59",

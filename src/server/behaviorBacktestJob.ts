@@ -39,9 +39,10 @@ function msUntilNextMidnightGmt8(): number {
  * if the server restarts shortly after a scheduled run.
  *
  * Controlled via env vars read by `runBehaviorBacktest`:
- *   BEHAVIOR_BACKTEST_START  (default "2024-11-07" — set this on Render)
- *   BEHAVIOR_BACKTEST_END    (default today GMT+8 — aligns with midnight scheduler)
- *   BEHAVIOR_PAIR            (default "BTC-USD")
+ *   BEHAVIOR_BACKTEST_START       (default "2021-11-07" — set this on Render)
+ *   BEHAVIOR_BACKTEST_END         (default yesterday GMT+8)
+ *   BEHAVIOR_PAIR                 (default "BTC-USD")
+ *   BEHAVIOR_BACKTEST_FORCE_FULL  (set "true" once after DST table fixes to rewrite history)
  *
  * Returns a cleanup function that cancels the pending timeout (call on SIGTERM).
  */

@@ -100,8 +100,8 @@ Append-only timeline. Newest entries at the **bottom** (or top — stay consiste
 - **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md`, `wiki/sources/behavior-backtest-render-scheduler.md`
 - **Notes:** `BehaviorSheetsReporter.readAllBehaviorRows()` + incremental/`up-to-date` paths call `BehaviorDashboardReporter.write()` so nightly appends no longer leave overview counts stale.
 
-## [2026-07-20] ingest | Behavior sync log tab (BEHAVIOR-SYNC-LOG)
+## [2026-07-21] ingest | DST TABLE2 + Issue A (US_TP_H1 at 23:xx)
 
-- **Raw:** none (Darren request via chat; ops follow-up to dashboard refresh fix)
-- **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md`, `wiki/sources/behavior-backtest-render-scheduler.md`
-- **Notes:** Added `BehaviorSyncLogReporter`; `runBehaviorBacktest` appends audit rows on incremental / full / up_to_date success paths (ran-at GMT+8, mode, rows written, dashboard refreshed, last raw date, raw row count, notes).
+- **Raw:** Darren `DST_Fix_Guide_FINAL_v4` (WhatsApp drop; not copied into `raw/` yet)
+- **Wiki:** updated `wiki/concepts/behavior-backtest-daily-ops.md` (FORCE_FULL note)
+- **Notes:** BOTH_DST restored to Darren TABLE2 (`UK_TP_H2` 22:00–22:59, `US_H1` 23:00–23:59). Issue A = older BOTH tagged 23:xx as `US_TP_H1`; incremental sync never rewrote those rows. Captions updated. Use `BEHAVIOR_BACKTEST_FORCE_FULL=true` once on Render to regenerate history.

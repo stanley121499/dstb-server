@@ -70,7 +70,20 @@ async function appendSyncLog(params: {
 export async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const verbose = process.argv.includes("--verbose");
-  const fullRun = process.argv.includes("--full");
+  // One-shot full rewrite: CLI --full OR Render env BEHAVIOR_BACKTEST_FORCE_FULL=true
+  // (needed after DST table fixes so historical captions/codes are regenerated).
+  const forceFullEnv = (process.env.BEHAVIOR_BACKTEST_FORCE_FULL ?? "").trim().toLowerCase();
+  const fullRun =
+    process.argv.includes("--full") ||
+    forceFullEnv === "1" ||
+    forceFullEnv === "true" ||
+    forceFullEnv === "yes";
+
+  if (fullRun && forceFullEnv !== "" && !process.argv.includes("--full")) {
+    console.log(
+      "[behavior-backtest] BEHAVIOR_BACKTEST_FORCE_FULL is set — running full sheet rewrite."
+    );
+  }
 
   const reporter = dryRun ? null : BehaviorSheetsReporter.fromEnv();
 

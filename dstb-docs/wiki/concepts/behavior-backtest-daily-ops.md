@@ -26,10 +26,12 @@ GitHub Actions workflow exists for **manual** runs only (US runners cannot reach
 | Mode | When | Sheet write |
 |------|------|-------------|
 | **Incremental** | Sheet has data; default nightly path | `appendRows()` — does **not** clear; then refreshes dashboard from **all** sheet rows; appends sync-log row |
-| **Full** | Empty sheet, `--full` flag, or first deploy | `bulkWrite()` — **clears** then rewrites; refreshes dashboard tab; appends sync-log row |
+| **Full** | Empty sheet, `--full` flag, `BEHAVIOR_BACKTEST_FORCE_FULL=true`, or first deploy | `bulkWrite()` — **clears** then rewrites; refreshes dashboard tab; appends sync-log row |
 | **Up to date** | Last row date ≥ yesterday | Still refreshes dashboard from the full sheet (heals stale overview); appends sync-log row |
 
 Incremental reads column **E** (`Date dd/mm/yyyy`), parses last row, fetches `(lastDate + 1)` through yesterday.
+
+**DST table / caption fixes do not rewrite history on a normal deploy.** Nightly/startup runs stay incremental when the sheet is already current. After changing session windows or captions, set `BEHAVIOR_BACKTEST_FORCE_FULL=true` once on Render (or run `npm run behavior:backtest -- --full`), wait for the full rewrite to finish, then remove the env var.
 
 ## Sync log tab (`BEHAVIOR-SYNC-LOG`)
 
@@ -51,7 +53,7 @@ Created automatically if missing (`BehaviorSyncLogReporter`). Optional env: `BEH
 
 - **Region:** Singapore (or other non-US) for Binance API access
 - **Env:** `GOOGLE_SHEETS_ID`, `GOOGLE_SERVICE_ACCOUNT_KEY` (secret file path)
-- **Optional:** `BEHAVIOR_SHEET_TAB`, `BEHAVIOR_DASHBOARD_TAB`, `BEHAVIOR_SYNC_LOG_TAB`, `BEHAVIOR_BACKTEST_START` (`2021-11-07`), `BEHAVIOR_PAIR` (`BTC-USD`)
+- **Optional:** `BEHAVIOR_SHEET_TAB`, `BEHAVIOR_DASHBOARD_TAB`, `BEHAVIOR_SYNC_LOG_TAB`, `BEHAVIOR_BACKTEST_START` (`2021-11-07`), `BEHAVIOR_PAIR` (`BTC-USD`), `BEHAVIOR_BACKTEST_FORCE_FULL` (one-shot full rewrite)
 - **Disable:** `BEHAVIOR_BACKTEST_DISABLED=true`
 
 ## Reliability notes

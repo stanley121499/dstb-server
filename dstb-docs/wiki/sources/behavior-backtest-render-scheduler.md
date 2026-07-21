@@ -34,6 +34,10 @@ S2 behavior backtest runs **in-process on Render** at **midnight GMT+8** (and on
 - Overview dashboard no longer refreshes on full runs only — incremental appends and “already up to date” paths recompute `BEHAVIOR-OVERVIEW-DASHBOARD` from the full raw sheet (`readAllBehaviorRows`).
 - Append-only `BEHAVIOR-SYNC-LOG` tab records ran-at (GMT+8), mode, rows written, dashboard refresh, last raw date, and notes after every successful path.
 
+## Resolved (2026-07-21)
+
+- Darren DST Fix Guide v4 TABLE2 adopted in `classifySessionBothDst` + verbose captions. Issue A (41× `US_TP_H1` at 23:xx) traced to older BOTH_DST; fixed classifier tags 23:xx as `US_H1`. History rewrite requires one `BEHAVIOR_BACKTEST_FORCE_FULL=true` (or `--full`) run — normal deploy sync is incremental only.
+
 ## Cross-references
 
 - [[../concepts/behavior-backtest-daily-ops|Behavior backtest daily ops]] — ops concept page
