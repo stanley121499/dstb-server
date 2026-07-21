@@ -221,11 +221,43 @@ export class BehaviorDashboardReporter {
   }
 
   /**
+   * Extracts the session/AR enum code from a verbose sheet label.
+   * e.g. "US_PRE — Pre US Warm-up 20:30:00 – 21:29:59" → "US_PRE"
+   */
+  private labelCode(verbose: string): string {
+    const sep = verbose.indexOf("—");
+    if (sep < 0) {
+      return verbose.trim();
+    }
+    return verbose.slice(0, sep).trim();
+  }
+
+  /**
+   * Picks the most common verbose label in a cluster (ties → longer string).
+   * Used so dashboard rows display one caption after merging US-DST vs BOTH variants.
+   */
+  private dominantLabel(labels: readonly string[]): string {
+    const counts: Record<string, number> = {};
+    for (const label of labels) {
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
+    const ranked = Object.entries(counts).sort((a, b) => {
+      if (b[1] !== a[1]) {
+        return b[1] - a[1];
+      }
+      return b[0].length - a[0].length;
+    });
+    return ranked[0]?.[0] ?? "";
+  }
+
+  /**
    * Computes cluster statistics from a set of BehaviorRows.
    * Filters out PD_NONE and NO_INTERACTION rows (not useful for pattern analysis).
    *
-   * Grouping key: previousDayLevel | asiaRange | session | sessionTimeMode | behavior
-   * (5 dimensions — sessionTimeMode separates STD vs DST regimes per Darren's requirement)
+   * Grouping key: previousDayLevel | asiaRangeCode | sessionCode | sessionTimeMode | behavior
+   * Session/AR verbose captions (which vary by US-only vs BOTH DST calendars) are
+   * collapsed to their enum codes so the overview is not fragmented — raw sheet
+   * still keeps year/regime-accurate captions.
    *
    * Ranking (per Darren's Priority Ranking spec — Part 5):
    *   All environments sorted by envScore DESC, then within same score:
@@ -239,14 +271,14 @@ export class BehaviorDashboardReporter {
       r => r.previousDayLevel !== "PD_NONE" && r.twoCandleBehavior !== "NO_INTERACTION"
     );
 
-    // Step 2: Group by 5-part composite environment key
-    // Key = "pdLevel|asiaRange|session|timeMode|behavior"
+    // Step 2: Group by 5-part composite environment key (codes, not full captions)
+    // Key = "pdLevel|asiaRangeCode|sessionCode|timeMode|behavior"
     const grouped = new Map<string, BehaviorRow[]>();
     for (const row of interactive) {
       const key = [
         row.previousDayLevel,
-        row.asiaRange,
-        row.firstInteractionSession,
+        this.labelCode(row.asiaRange),
+        this.labelCode(row.firstInteractionSession),
         row.firstInteractionSessionTimeMode,
         row.twoCandleBehavior,
       ].join("|");
@@ -316,10 +348,14 @@ export class BehaviorDashboardReporter {
         + this.scoreCount(totalCount);
       const envGrade = this.scoreToGrade(envScore, outcomeBiasPercent);
 
+      // Display the most common verbose labels (raw sheet stays year/regime-accurate).
+      const asiaRangeLabel = this.dominantLabel(clusterRows.map((r) => r.asiaRange));
+      const sessionLabel = this.dominantLabel(clusterRows.map((r) => r.firstInteractionSession));
+
       clusters.push({
         previousDayLevel:        parts[0] ?? "",
-        asiaRange:               parts[1] ?? "",
-        firstInteractionSession: parts[2] ?? "",
+        asiaRange:               asiaRangeLabel !== "" ? asiaRangeLabel : (parts[1] ?? ""),
+        firstInteractionSession: sessionLabel !== "" ? sessionLabel : (parts[2] ?? ""),
         sessionTimeMode:         parts[3] ?? "",
         twoCandleBehavior:       parts[4] ?? "",
         totalCount,
