@@ -58,12 +58,16 @@ const SESSION_VERBOSE_STD: Readonly<Record<string, string>> = {
   "US_TP_H2": "US_TP_H2 — TP Zone 2nd Half 04:00:00 – 04:59:59",
 };
 
-/** US DST only — US sessions shift 1h earlier; UK stays on winter schedule (UTC+8). */
+/**
+ * US DST only — US sessions shift 1h earlier; UK stays on winter schedule (UTC+8).
+ * US_PRE caption uses the natural US clock window (20:30–21:29) even though the
+ * classifier assigns UK_H2 for 21:00–21:29 (incoming-wins). Darren: cosmetic only.
+ */
 const SESSION_VERBOSE_US_DST: Readonly<Record<string, string>> = {
   "UK_PRE":   "UK_PRE — Pre UK Warm-up 16:00:00 – 16:59:59",
   "UK_H1":    "UK_H1 — 1st Half 17:00:00 – 18:59:59",
   "UK_TP_H1": "UK_TP_H1 — TP Zone 1st Half 19:00:00 – 20:29:59",
-  "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 20:59:59",
+  "US_PRE":   "US_PRE — Pre US Warm-up 20:30:00 – 21:29:59",
   "UK_H2":    "UK_H2 — 2nd Half 21:00:00 – 21:29:59",
   "US_H1":    "US_H1 — 1st Half 21:30:00 – 23:59:59",
   "UK_TP_H2": "UK_TP_H2 — TP Zone 2nd Half 23:00:00 – 23:59:59",
